@@ -20,7 +20,7 @@ interface PostsState {
   loading: boolean;
   error: string | null;
   fetchPosts: () => Promise<void>;
-  createPost: (content: string, platforms: Platform[], scheduledAt?: string) => Promise<void>;
+  createPost: (content: string, platforms: Platform[], scheduledAt?: string, mediaUrls?: string[]) => Promise<void>;
 }
 
 export const usePostsStore = create<PostsState>((set) => ({
@@ -64,13 +64,14 @@ export const usePostsStore = create<PostsState>((set) => ({
     }
   },
 
-  createPost: async (content: string, platforms: Platform[], scheduledAt?: string) => {
+  createPost: async (content: string, platforms: Platform[], scheduledAt?: string, mediaUrls?: string[]) => {
     set({ loading: true, error: null });
     try {
       await api.post("/posts", {
         content,
         platforms,
         scheduledAt: scheduledAt || undefined,
+        ...(mediaUrls && mediaUrls.length > 0 ? { mediaUrls } : {}),
       });
       // Refetch posts to update list with newly created post
       const response = await api.get<{
