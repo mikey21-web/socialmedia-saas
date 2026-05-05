@@ -1,0 +1,1 @@
+ALTER TABLE "Post" ADD COLUMN "mediaUrls" JSONB NOT NULL DEFAULT '[]';

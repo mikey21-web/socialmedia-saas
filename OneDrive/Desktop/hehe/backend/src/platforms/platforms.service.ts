@@ -1,0 +1,340 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
+import { PrismaService } from '../prisma/prisma.service';
+
+const SUPPORTED_PLATFORMS = ['x', 'twitter', 'instagram', 'linkedin', 'facebook'] as const;
+type SupportedPlatform = (typeof SUPPORTED_PLATFORMS)[number];
+
+export type PlatformTokenPayload = {
+  accessToken: string;
+  refreshToken?: string | null;
+  expiresAt?: Date | null;
+};
+
+@Injectable()
+export class PlatformsService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  listSupportedPlatforms() {
+    return SUPPORTED_PLATFORMS;
+  }
+
+  async storeCredential(
+    userId: string,
+    platform: string,
+    tokens: PlatformTokenPayload,
+  ) {
+    const normalizedPlatform = this.normalizePlatform(platform);
+    const teamId = await this.resolveTeamId(userId);
+    const key = this.deriveKey(userId);
+
+    const encryptedAccessToken = this.encryptValue(tokens.accessToken, key);
+    const encryptedRefreshToken = tokens.refreshToken
+      ? this.encryptValue(tokens.refreshToken, key)
+      : null;
+
+    await this.prisma.platformCredential.upsert({
+      where: {
+        teamId_platform: {
+          teamId,
+          platform: normalizedPlatform,
+        },
+      },
+      create: {
+        teamId,
+        platform: normalizedPlatform,
+        accessToken: encryptedAccessToken,
+        refreshToken: encryptedRefreshToken,
+        expiresAt: tokens.expiresAt ?? null,
+      },
+      update: {
+        accessToken: encryptedAccessToken,
+        refreshToken: encryptedRefreshToken,
+        expiresAt: tokens.expiresAt ?? null,
+      },
+    });
+  }
+
+  async getCredential(userId: string, platform: string) {
+    const normalizedPlatform = this.normalizePlatform(platform);
+    const teamId = await this.resolveTeamId(userId);
+    const key = this.deriveKey(userId);
+
+    const credential = await this.prisma.platformCredential.findUnique({
+      where: {
+        teamId_platform: {
+          teamId,
+          platform: normalizedPlatform,
+        },
+      },
+    });
+
+    if (!credential) {
+      throw new NotFoundException('Platform credential not found');
+    }
+
+    return {
+      accessToken: this.decryptValue(credential.accessToken, key),
+      refreshToken: credential.refreshToken
+        ? this.decryptValue(credential.refreshToken, key)
+        : null,
+      expiresAt: credential.expiresAt,
+    };
+  }
+
+  async getCredentialById(userId: string, credentialId: string) {
+    const key = this.deriveKey(userId);
+    const credential = await this.prisma.platformCredential.findFirst({
+      where: {
+        id: credentialId,
+        team: {
+          members: {
+            some: {
+              userId,
+            },
+          },
+        },
+      },
+    });
+
+    if (!credential) {
+      throw new NotFoundException('Platform credential not found');
+    }
+
+    return {
+      platform: credential.platform,
+      accessToken: this.decryptValue(credential.accessToken, key),
+      refreshToken: credential.refreshToken
+        ? this.decryptValue(credential.refreshToken, key)
+        : null,
+      expiresAt: credential.expiresAt,
+    };
+  }
+
+  async refreshToken(userId: string, platform: string) {
+    const normalizedPlatform = this.normalizePlatform(platform);
+    const currentCredential = await this.getCredential(userId, normalizedPlatform);
+
+    if (!currentCredential.refreshToken) {
+      throw new BadRequestException('Refresh token is not available for this platform');
+    }
+
+    const refreshedTokens = await this.callRefreshTokenEndpoint(
+      normalizedPlatform,
+      currentCredential.refreshToken,
+    );
+
+    await this.storeCredential(userId, normalizedPlatform, {
+      accessToken: refreshedTokens.accessToken,
+      refreshToken: refreshedTokens.refreshToken ?? currentCredential.refreshToken,
+      expiresAt: refreshedTokens.expiresAt,
+    });
+
+    return {
+      platform: normalizedPlatform,
+      refreshed: true,
+    };
+  }
+
+  private async callRefreshTokenEndpoint(platform: string, refreshToken: string) {
+    const clientId = this.readOAuthEnv(platform, 'CLIENT_ID');
+    const clientSecret = this.readOAuthEnv(platform, 'CLIENT_SECRET');
+
+    const tokenEndpointByPlatform: Record<string, string> = {
+      x: 'https://api.twitter.com/2/oauth2/token',
+      instagram: 'https://graph.instagram.com/refresh_access_token',
+      linkedin: 'https://www.linkedin.com/oauth/v2/accessToken',
+      facebook: 'https://graph.facebook.com/v19.0/oauth/access_token',
+    };
+
+    const tokenEndpoint = tokenEndpointByPlatform[platform];
+
+    if (!tokenEndpoint) {
+      throw new BadRequestException(`Unsupported platform: ${platform}`);
+    }
+
+    if (platform === 'instagram') {
+      const url = new URL(tokenEndpoint);
+      url.searchParams.set('grant_type', 'ig_refresh_token');
+      url.searchParams.set('access_token', refreshToken);
+
+      const response = await fetch(url, { method: 'GET' });
+      const payload = await this.extractJson(response);
+      return this.normalizeTokenResponse(payload);
+    }
+
+    const body = new URLSearchParams({
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      client_id: clientId,
+      client_secret: clientSecret,
+    });
+
+    const response = await fetch(tokenEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    });
+
+    const payload = await this.extractJson(response);
+    return this.normalizeTokenResponse(payload);
+  }
+
+  private normalizeTokenResponse(payload: Record<string, unknown>) {
+    const accessToken = this.readString(payload, ['access_token', 'accessToken']);
+    const refreshToken = this.readOptionalString(payload, ['refresh_token', 'refreshToken']);
+    const expiresIn = this.readOptionalNumber(payload, ['expires_in', 'expiresIn']);
+
+    return {
+      accessToken,
+      refreshToken,
+      expiresAt: typeof expiresIn === 'number'
+        ? new Date(Date.now() + expiresIn * 1000)
+        : null,
+    };
+  }
+
+  private deriveKey(userId: string) {
+    const secret = process.env.JWT_SECRET;
+
+    if (!secret) {
+      throw new BadRequestException('JWT_SECRET is not configured');
+    }
+
+    return createHash('sha256')
+      .update(`${secret}:${userId}`)
+      .digest();
+  }
+
+  private encryptValue(value: string, key: Buffer) {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', key, iv);
+    const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
+    const authTag = cipher.getAuthTag();
+
+    return `${iv.toString('base64')}.${authTag.toString('base64')}.${encrypted.toString('base64')}`;
+  }
+
+  private decryptValue(value: string, key: Buffer) {
+    const [ivB64, authTagB64, encryptedB64] = value.split('.');
+
+    if (!ivB64 || !authTagB64 || !encryptedB64) {
+      throw new BadRequestException('Stored credential format is invalid');
+    }
+
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      key,
+      Buffer.from(ivB64, 'base64'),
+    );
+    decipher.setAuthTag(Buffer.from(authTagB64, 'base64'));
+
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(encryptedB64, 'base64')),
+      decipher.final(),
+    ]);
+
+    return decrypted.toString('utf8');
+  }
+
+  private async resolveTeamId(userId: string) {
+    const membership = await this.prisma.teamMember.findFirst({
+      where: { userId },
+      select: { teamId: true },
+      orderBy: { id: 'asc' },
+    });
+
+    if (!membership) {
+      throw new ForbiddenException('User is not a member of any team');
+    }
+
+    return membership.teamId;
+  }
+
+  private normalizePlatform(platform: string) {
+    const normalizedPlatform = platform.toLowerCase() === 'twitter' ? 'x' : platform.toLowerCase();
+
+    if (!SUPPORTED_PLATFORMS.includes(normalizedPlatform as SupportedPlatform)) {
+      throw new BadRequestException(`Unsupported platform: ${platform}`);
+    }
+
+    return normalizedPlatform;
+  }
+
+  private async extractJson(response: Response) {
+    const payload = (await response.json()) as Record<string, unknown>;
+
+    if (!response.ok) {
+      const message = this.readOptionalString(payload, ['error_description', 'error', 'message'])
+        ?? 'OAuth token exchange failed';
+      throw new BadRequestException(message);
+    }
+
+    return payload;
+  }
+
+  private readOAuthEnv(platform: string, key: 'CLIENT_ID' | 'CLIENT_SECRET') {
+    const envPrefixByPlatform: Record<string, string> = {
+      x: 'X',
+      instagram: 'INSTAGRAM',
+      linkedin: 'LINKEDIN',
+      facebook: 'FACEBOOK',
+    };
+
+    const prefix = envPrefixByPlatform[platform];
+    const envKey = `${prefix}_${key}`;
+    const value = process.env[envKey];
+
+    if (!value) {
+      throw new BadRequestException(`${envKey} is not configured`);
+    }
+
+    return value;
+  }
+
+  private readString(payload: Record<string, unknown>, keys: string[]) {
+    for (const key of keys) {
+      const value = payload[key];
+      if (typeof value === 'string' && value.trim()) {
+        return value;
+      }
+    }
+
+    throw new BadRequestException('Token response did not include access token');
+  }
+
+  private readOptionalString(payload: Record<string, unknown>, keys: string[]) {
+    for (const key of keys) {
+      const value = payload[key];
+      if (typeof value === 'string' && value.trim()) {
+        return value;
+      }
+    }
+
+    return null;
+  }
+
+  private readOptionalNumber(payload: Record<string, unknown>, keys: string[]) {
+    for (const key of keys) {
+      const value = payload[key];
+      if (typeof value === 'number') {
+        return value;
+      }
+      if (typeof value === 'string' && value.trim()) {
+        const parsed = Number(value);
+        if (!Number.isNaN(parsed)) {
+          return parsed;
+        }
+      }
+    }
+
+    return null;
+  }
+}

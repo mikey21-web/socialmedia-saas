@@ -1,0 +1,131 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  teams TeamMember[]
+
+  @@index([email])
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  members      TeamMember[]
+  posts        Post[]
+  credentials  PlatformCredential[]
+  subscription Subscription?
+
+  @@index([ownerId])
+}
+
+model TeamMember {
+  id     String @id @default(cuid())
+  userId String
+  teamId String
+  role   String @default("editor")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, teamId])
+  @@index([teamId])
+}
+
+model Post {
+  id          String   @id @default(cuid())
+  teamId      String
+  title       String
+  content     String
+  mediaUrls   Json     @default("[]")
+  status      String   @default("draft")
+  scheduledAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  team      Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  platforms PostPlatform[]
+  analytics AnalyticsEvent[]
+
+  @@index([teamId])
+  @@index([status])
+}
+
+model PostPlatform {
+  id             String @id @default(cuid())
+  postId         String
+  platform       String
+  platformPostId String?
+  status         String @default("pending")
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, platform])
+}
+
+model PlatformCredential {
+  id           String   @id @default(cuid())
+  teamId       String
+  platform     String
+  accessToken  String   @db.Text
+  refreshToken String?  @db.Text
+  expiresAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, platform])
+}
+
+model Subscription {
+  id               String   @id @default(cuid())
+  teamId           String   @unique
+  plan             String   @default("free")
+  stripeCustomerId String?
+  stripePriceId    String?
+  stripeId         String?
+  status           String   @default("active")
+  currentPeriodEnd DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  canceledAt       DateTime?
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([stripeCustomerId])
+  @@index([stripePriceId])
+  @@index([stripeId])
+}
+
+model AnalyticsEvent {
+  id          String   @id @default(cuid())
+  postId      String
+  eventType   String
+  count       Int      @default(1)
+  collectedAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([eventType])
+}

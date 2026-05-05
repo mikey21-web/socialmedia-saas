@@ -1,0 +1,53 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Patch,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import { JwtAuthGuard } from '../auth/jwt.guard';
+import { SubscriptionFeatureLimit } from '../common/decorators/subscription-feature.decorator';
+import { SubscriptionGuard } from '../common/guards/subscription.guard';
+import { PostsService } from './posts.service';
+import { AuthenticatedRequestUser } from '../common/interfaces/authenticated-request-user.interface';
+import { CreatePostDto } from './dto/create-post.dto';
+import { ListPostsDto } from './dto/list-posts.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
+
+@UseGuards(JwtAuthGuard, SubscriptionGuard)
+@Controller('posts')
+export class PostsController {
+  constructor(private readonly postsService: PostsService) {}
+
+  @Post()
+  @SubscriptionFeatureLimit('posts')
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  createPost(
+    @Req() req: { user: AuthenticatedRequestUser },
+    @Body() dto: CreatePostDto,
+  ) {
+    return this.postsService.createPost(req.user, dto);
+  }
+
+  @Get()
+  listPosts(
+    @Req() req: { user: AuthenticatedRequestUser },
+    @Query() query: ListPostsDto,
+  ) {
+    return this.postsService.listPosts(req.user, query);
+  }
+
+  @Patch(':id')
+  updatePost(
+    @Req() req: { user: AuthenticatedRequestUser },
+    @Param('id') postId: string,
+    @Body() dto: UpdatePostDto,
+  ) {
+    return this.postsService.updatePost(req.user, postId, dto);
+  }
+}
