@@ -23,19 +23,21 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 import { ThirdPartyModule } from './thirdparty/thirdparty.module';
 import { RssModule } from './rss/rss.module';
 import { AiModule } from './ai/ai.module';
+import { HealthController } from './health.controller';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
     ThrottlerModule.forRootAsync({
       useFactory: () => {
+        const baseConfig = { throttlers: [{ ttl: 60000, limit: 120 }] };
         if (!process.env.REDIS_URL) {
-          console.warn('REDIS_URL is not configured, falling back to redis://localhost:6379');
+          console.warn('REDIS_URL not configured, using in-memory throttler storage');
+          return baseConfig;
         }
-        const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
         return {
-          throttlers: [{ ttl: 60000, limit: 120 }],
-          storage: new ThrottlerStorageRedisService(new Redis(redisUrl)),
+          ...baseConfig,
+          storage: new ThrottlerStorageRedisService(new Redis(process.env.REDIS_URL)),
         };
       },
     }),
@@ -57,6 +59,7 @@ import { AiModule } from './ai/ai.module';
     RssModule,
     AiModule,
   ],
+  controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }, RedisProvider],
   exports: [RedisProvider],
 })
