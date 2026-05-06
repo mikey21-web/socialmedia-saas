@@ -22,6 +22,7 @@ import { TemporalModule } from './temporal/temporal.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
 import { ThirdPartyModule } from './thirdparty/thirdparty.module';
 import { RssModule } from './rss/rss.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { RssModule } from './rss/rss.module';
     TeamsModule,
     ThirdPartyModule,
     RssModule,
+    AiModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }, RedisProvider],
   exports: [RedisProvider],

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { AlertCircle, ImagePlus, Loader2, Plus, X } from "lucide-react";
+import { AlertCircle, ImagePlus, Loader2, Plus, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -48,6 +48,10 @@ export function PostModal({ trigger, defaultDate, onSuccess, open: controlledOpe
   const [customCron, setCustomCron] = useState("");
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const [mediaUrls, setMediaUrls] = useState<string[]>([]);
+  const [aiTopic, setAiTopic] = useState("");
+  const [aiTone, setAiTone] = useState<"professional" | "casual" | "funny" | "inspirational">("professional");
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
 
   const createPost = usePostsStore((state) => state.createPost);
   const sets = usePostsetsStore((state) => state.sets);
@@ -105,6 +109,25 @@ export function PostModal({ trigger, defaultDate, onSuccess, open: controlledOpe
         ? current.filter((value) => value !== platform)
         : [...current, platform],
     );
+  }
+
+  async function generateWithAi() {
+    if (!aiTopic.trim()) return;
+    setAiGenerating(true);
+    try {
+      const res = await api.post<{ content: string; hashtags: string[] }>("/ai/generate-caption", {
+        topic: aiTopic,
+        platforms: selected,
+        tone: aiTone,
+      });
+      const full = res.data.content + (res.data.hashtags.length > 0 ? "\n\n" + res.data.hashtags.map((h) => `#${h.replace(/^#/, "")}`).join(" ") : "");
+      setValue("content", full.slice(0, 280), { shouldValidate: true });
+      setAiPanelOpen(false);
+    } catch {
+      // silently fail — user can still type manually
+    } finally {
+      setAiGenerating(false);
+    }
   }
 
   async function onSubmit(values: FormValues) {
@@ -200,10 +223,56 @@ export function PostModal({ trigger, defaultDate, onSuccess, open: controlledOpe
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="modal-content">Content</Label>
-                <span className={cn("text-xs tabular-nums", charCount > 260 ? "text-destructive" : "text-muted-foreground")}>
-                  {charCount}/280
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAiPanelOpen((v) => !v)}
+                    className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+                  >
+                    <Sparkles className="size-3" />
+                    AI Generate
+                  </button>
+                  <span className={cn("text-xs tabular-nums", charCount > 260 ? "text-destructive" : "text-muted-foreground")}>
+                    {charCount}/280
+                  </span>
+                </div>
               </div>
+
+              {aiPanelOpen && (
+                <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                  <Input
+                    placeholder="Topic or brief (e.g. 'our new product launch')"
+                    value={aiTopic}
+                    onChange={(e) => setAiTopic(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void generateWithAi(); } }}
+                  />
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={aiTone}
+                      onChange={(e) => setAiTone(e.target.value as typeof aiTone)}
+                      className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs"
+                    >
+                      <option value="professional">Professional</option>
+                      <option value="casual">Casual</option>
+                      <option value="funny">Funny</option>
+                      <option value="inspirational">Inspirational</option>
+                    </select>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!aiTopic.trim() || aiGenerating}
+                      onClick={() => void generateWithAi()}
+                      className="gap-1"
+                    >
+                      {aiGenerating ? <Loader2 className="size-3 animate-spin" /> : <Sparkles className="size-3" />}
+                      Generate
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
               <Textarea
                 id="modal-content"
                 placeholder="What do you want to share?"
