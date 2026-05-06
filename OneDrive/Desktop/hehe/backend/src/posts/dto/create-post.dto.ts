@@ -13,7 +13,7 @@ import {
   Min,
 } from 'class-validator';
 
-const VALID_PLATFORMS = ['twitter', 'instagram', 'linkedin', 'facebook'] as const;
+const VALID_PLATFORMS = ['twitter', 'instagram', 'linkedin', 'facebook', 'youtube', 'tiktok'] as const;
 
 export class CreatePostDto {
   @IsString()

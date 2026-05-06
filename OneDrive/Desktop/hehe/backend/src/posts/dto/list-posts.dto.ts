@@ -1,5 +1,7 @@
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+
+const VALID_STATUSES = ['draft', 'scheduled', 'publishing', 'published', 'partially_published', 'failed'] as const;
 
 export class ListPostsDto {
   @IsOptional()
@@ -14,4 +16,8 @@ export class ListPostsDto {
   @Min(1)
   @Max(100)
   limit?: number;
+
+  @IsOptional()
+  @IsIn(VALID_STATUSES)
+  status?: string;
 }

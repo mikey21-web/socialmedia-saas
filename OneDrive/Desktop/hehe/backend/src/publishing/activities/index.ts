@@ -6,6 +6,7 @@ import { PublishActivityResult, PlatformPublishJob } from '../types';
 import { buildPublishFacebookActivity } from './publish-facebook';
 import { buildPublishInstagramActivity } from './publish-instagram';
 import { buildPublishLinkedInActivity } from './publish-linkedin';
+import { buildPublishTikTokActivity } from './publish-tiktok';
 import { buildPublishTwitterActivity } from './publish-twitter';
 import { buildPublishYouTubeActivity } from './publish-youtube';
 import { createTokenRefreshActivities } from './token-refresh.activities';
@@ -91,6 +92,7 @@ export function createPublishingActivities(
     publishLinkedIn: buildPublishLinkedInActivity(platformsService),
     publishFacebook: buildPublishFacebookActivity(platformsService),
     publishYouTube: buildPublishYouTubeActivity(platformsService),
+    publishTikTok: buildPublishTikTokActivity(platformsService),
     finalizePublishPost: async (input: {
       postId: string;
       teamId: string;
@@ -161,23 +163,43 @@ export function createPublishingActivities(
           recurrenceEndAt: true,
           nextPublishAt: true,
           scheduledAt: true,
+          status: true,
         },
       });
 
-      if (!post?.isRecurring || !post.recurrencePattern) {
+      if (!post) {
         return;
       }
 
-      const currentDate = post.nextPublishAt ?? post.scheduledAt ?? new Date();
+      if (!post.isRecurring || !post.recurrencePattern) {
+        await prisma.post.update({
+          where: { id: input.postId },
+          data: { status: post.status === 'failed' ? 'failed' : 'published', nextPublishAt: null },
+        });
+        return;
+      }
+
+      if (post.status === 'failed') {
+        return;
+      }
+
+      const now = new Date();
+      if (post.recurrenceEndAt && post.recurrenceEndAt <= now) {
+        await prisma.post.update({
+          where: { id: post.id },
+          data: { status: 'published', nextPublishAt: null },
+        });
+        return;
+      }
 
       try {
-        const iterator = CronExpressionParser.parse(post.recurrencePattern, { currentDate });
+        const iterator = CronExpressionParser.parse(post.recurrencePattern, { currentDate: now });
         const nextPublishAt = iterator.next().toDate();
 
         if (post.recurrenceEndAt && nextPublishAt > post.recurrenceEndAt) {
           await prisma.post.update({
             where: { id: post.id },
-            data: { isRecurring: false, nextPublishAt: null },
+            data: { status: 'published', nextPublishAt: null },
           });
           return;
         }
@@ -194,7 +216,7 @@ export function createPublishingActivities(
       } catch {
         await prisma.post.update({
           where: { id: post.id },
-          data: { isRecurring: false, nextPublishAt: null },
+          data: { status: 'published', nextPublishAt: null },
         });
       }
     },

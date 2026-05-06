@@ -5,6 +5,7 @@ export type AnalyticsMetricRecord = {
   engagements?: number;
   likes?: number;
   comments?: number;
+  shares?: number;
   clicks?: number;
   followers_growth?: number;
 };

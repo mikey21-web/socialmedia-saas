@@ -1,4 +1,13 @@
-import { IsArray, IsISO8601, IsIn, IsOptional, IsString, IsUrl, Length } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsISO8601,
+  IsIn,
+  IsOptional,
+  IsString,
+  IsUrl,
+  Length,
+} from 'class-validator';
 
 const VALID_STATUSES = ['draft', 'scheduled', 'published'] as const;
 
@@ -20,4 +29,16 @@ export class UpdatePostDto {
   @IsArray()
   @IsUrl({}, { each: true })
   mediaUrls?: string[];
+
+  @IsOptional()
+  @IsBoolean()
+  isRecurring?: boolean;
+
+  @IsOptional()
+  @IsString()
+  recurrencePattern?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  recurrenceEndAt?: string;
 }

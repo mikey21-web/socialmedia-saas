@@ -10,6 +10,8 @@ export type PublishActivityInput = {
 export type PublishActivityResult = {
   success: boolean;
   externalId?: string;
+  platformPostId?: string;
+  url?: string;
   error?: string;
 };
 

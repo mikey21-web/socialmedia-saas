@@ -2,154 +2,128 @@
 
 import { create } from "zustand";
 import { api } from "@/lib/api";
+import type { Platform } from "@/components/platform-badge";
 
-export interface MetricsData {
-  postId: string;
-  platforms: Record<string, {
-    impressions: number;
-    engagements: number;
-    likes: number;
-    retweets?: number;
-    replies?: number;
-    comments?: number;
-    clicks?: number;
-  }>;
-  total: {
-    impressions: number;
-    engagements: number;
-    likes: number;
-    engagement_rate: string;
-  };
-  collected_at: string;
+export type AnalyticsPreset = "7d" | "30d" | "90d" | "custom";
+
+export interface AnalyticsPlatformSummary {
+  platform: string;
+  impressions: number;
+  likes: number;
+  comments: number;
+  shares: number;
 }
 
-export interface ChartData {
-  name: string;
-  Impressions: number;
-  Engagements: number;
-}
-
-export interface PlatformStats {
-  name: string;
-  posts: number;
+export interface AnalyticsDaySummary {
+  date: string;
   impressions: number;
   engagements: number;
 }
 
-interface AnalyticsState {
-  metrics: MetricsData[];
-  chartData: ChartData[];
-  platformStats: PlatformStats[];
-  loading: boolean;
-  error: string | null;
-  dateRange: "7d" | "30d" | "90d";
-  smartSuggestions: {
-    bestTimes: string[];
-    topPlatforms: string[];
-    contentTips: string[];
-    weeklyInsight: string;
-  } | null;
-  setDateRange: (range: "7d" | "30d" | "90d") => void;
-  fetchMetrics: () => Promise<void>;
-  fetchSmartSuggestions: () => Promise<void>;
-  exportCSV: () => void;
+export interface AnalyticsTopPost {
+  postId: string;
+  title: string;
+  platform: string;
+  impressions: number;
+  engagements: number;
 }
 
-export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
-  metrics: [],
-  chartData: [],
-  platformStats: [],
+export interface AnalyticsSummary {
+  totalImpressions: number;
+  totalEngagements: number;
+  totalReach: number;
+  byPlatform: AnalyticsPlatformSummary[];
+  byDay: AnalyticsDaySummary[];
+  byDayPlatform: Array<Record<string, number | string>>;
+  topPosts: AnalyticsTopPost[];
+}
+
+interface AnalyticsState {
+  preset: AnalyticsPreset;
+  from: string;
+  to: string;
+  summary: AnalyticsSummary | null;
+  previousSummary: AnalyticsSummary | null;
+  loading: boolean;
+  error: string | null;
+  setRange: (preset: AnalyticsPreset, from: string, to: string) => void;
+  fetchSummary: (from: string, to: string) => Promise<void>;
+}
+
+function toIsoDate(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function shiftRange(from: string, to: string) {
+  const fromDate = new Date(`${from}T00:00:00.000Z`);
+  const toDate = new Date(`${to}T23:59:59.999Z`);
+  const diff = toDate.getTime() - fromDate.getTime() + 1;
+
+  const previousTo = new Date(fromDate.getTime() - 1);
+  const previousFrom = new Date(previousTo.getTime() - diff + 1);
+
+  return {
+    from: previousFrom.toISOString(),
+    to: previousTo.toISOString(),
+  };
+}
+
+function createDefaultRange() {
+  const end = new Date();
+  const start = new Date(end.getTime() - 29 * 24 * 60 * 60 * 1000);
+  return {
+    from: toIsoDate(start),
+    to: toIsoDate(end),
+  };
+}
+
+export const useAnalyticsStore = create<AnalyticsState>((set) => ({
+  preset: "30d",
+  ...createDefaultRange(),
+  summary: null,
+  previousSummary: null,
   loading: false,
   error: null,
-  dateRange: "30d",
-  smartSuggestions: null,
 
-  setDateRange: (range) => set({ dateRange: range }),
+  setRange: (preset, from, to) => set({ preset, from, to }),
 
-  fetchMetrics: async () => {
+  fetchSummary: async (from, to) => {
     set({ loading: true, error: null });
-    try {
-      const response = await api.get<{
-        metrics: MetricsData[];
-        chartData: ChartData[];
-        platformStats: PlatformStats[];
-        total_impressions?: number;
-        total_engagements?: number;
-      }>("/analytics/team", {
-        params: { range: get().dateRange },
-      });
 
-      const fallbackMetrics: MetricsData[] =
-        response.data.metrics
-        ?? (typeof response.data.total_impressions === "number"
-          ? [{
-            postId: "team",
-            platforms: {},
-            total: {
-              impressions: response.data.total_impressions ?? 0,
-              engagements: response.data.total_engagements ?? 0,
-              likes: 0,
-              engagement_rate: "0%",
-            },
-            collected_at: new Date().toISOString(),
-          }]
-          : []);
+    try {
+      const [summaryResponse, previousResponse] = await Promise.all([
+        api.get<AnalyticsSummary>("/analytics/summary", {
+          params: {
+            from: new Date(`${from}T00:00:00.000Z`).toISOString(),
+            to: new Date(`${to}T23:59:59.999Z`).toISOString(),
+          },
+        }),
+        api.get<AnalyticsSummary>("/analytics/summary", {
+          params: shiftRange(from, to),
+        }),
+      ]);
 
       set({
-        metrics: fallbackMetrics,
-        chartData: response.data.chartData || [],
-        platformStats: response.data.platformStats || [],
+        summary: summaryResponse.data,
+        previousSummary: previousResponse.data,
         loading: false,
+        from,
+        to,
       });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to fetch analytics";
-      set({ error: message, loading: false });
-    }
-  },
-
-  fetchSmartSuggestions: async () => {
-    try {
-      const response = await api.get<{
-        bestTimes: string[];
-        topPlatforms: string[];
-        contentTips: string[];
-        weeklyInsight: string;
-      }>("/analytics/smart-suggestions");
-      set({ smartSuggestions: response.data });
-    } catch {
-      set({ smartSuggestions: null });
-    }
-  },
-
-  exportCSV: () => {
-    const { metrics } = get();
-    if (metrics.length === 0) {
-      alert("No data to export");
-      return;
-    }
-
-    const rows = [["Post ID", "Platform", "Impressions", "Engagements", "Likes", "Collected At"]];
-
-    metrics.forEach((m) => {
-      Object.entries(m.platforms).forEach(([platform, stats]) => {
-        rows.push([
-          m.postId,
-          platform,
-          String(stats.impressions),
-          String(stats.engagements),
-          String(stats.likes),
-          m.collected_at,
-        ]);
+    } catch (error) {
+      set({
+        loading: false,
+        error: error instanceof Error ? error.message : "Failed to fetch analytics summary",
       });
-    });
-
-    const csv = rows.map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `analytics-${new Date().toISOString().split("T")[0]}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    }
   },
 }));
+
+export const PLATFORM_HEX: Record<Platform, string> = {
+  twitter: "#38bdf8",
+  instagram: "#f472b6",
+  linkedin: "#60a5fa",
+  facebook: "#818cf8",
+  youtube: "#f87171",
+  tiktok: "#f8fafc",
+};

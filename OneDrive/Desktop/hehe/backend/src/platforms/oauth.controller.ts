@@ -27,6 +27,17 @@ export class OauthController {
     return res.redirect(url);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get(':platform/url')
+  getAuthorizeUrl(
+    @Param('platform') platform: string,
+    @Req() req: { user: AuthenticatedRequestUser },
+  ) {
+    return {
+      url: this.oauthService.getAuthorizeUrl(platform, req.user.userId),
+    };
+  }
+
   @Get('callback')
   callback(
     @Query('code') code: string | undefined,

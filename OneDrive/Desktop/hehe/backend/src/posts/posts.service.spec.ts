@@ -165,7 +165,7 @@ describe('PostsService', () => {
       await expect(
         service.createPost(user, {
           content: 'Hello world',
-          platforms: ['youtube'],
+          platforms: ['mastodon'],
         }),
       ).rejects.toThrow(BadRequestException);
     });

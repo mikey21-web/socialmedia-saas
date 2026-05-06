@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { api } from "@/lib/api";
 
-export type Platform = "twitter" | "instagram" | "linkedin" | "facebook" | "youtube";
+export type Platform = "twitter" | "instagram" | "linkedin" | "facebook" | "youtube" | "tiktok";
 
 export interface Post {
   id: string;

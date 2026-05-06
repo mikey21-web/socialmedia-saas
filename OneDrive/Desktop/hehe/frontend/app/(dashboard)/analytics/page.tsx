@@ -1,189 +1,419 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { BarChart3, Download, RotateCw } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useAnalyticsStore } from "@/store/analytics";
-import { cn } from "@/lib/utils";
+import { PlatformBadge, type Platform } from "@/components/platform-badge";
+import { PLATFORM_HEX, useAnalyticsStore, type AnalyticsPreset, type AnalyticsTopPost } from "@/store/analytics";
 
-const RANGES = ["7d", "30d", "90d"] as const;
-type Range = (typeof RANGES)[number];
+const PRESETS: Array<{ value: AnalyticsPreset; label: string; days?: number }> = [
+  { value: "7d", label: "Last 7 days", days: 7 },
+  { value: "30d", label: "Last 30 days", days: 30 },
+  { value: "90d", label: "Last 90 days", days: 90 },
+  { value: "custom", label: "Custom" },
+];
 
 const TOOLTIP_STYLE = {
-  background: "#1c1c1c",
-  border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 8,
-  fontSize: 12,
+  background: "rgba(10, 10, 15, 0.94)",
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 12,
+  color: "#f8fafc",
 };
 
+function toDateInput(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function buildRange(days: number) {
+  const end = new Date();
+  const start = new Date(end.getTime() - (days - 1) * 24 * 60 * 60 * 1000);
+  return {
+    from: toDateInput(start),
+    to: toDateInput(end),
+  };
+}
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat().format(value);
+}
+
+function formatDelta(current: number, previous: number) {
+  if (previous === 0) {
+    return { value: current > 0 ? 100 : 0, positive: current >= previous };
+  }
+  const delta = ((current - previous) / previous) * 100;
+  return { value: delta, positive: delta >= 0 };
+}
+
+function TopPostsTable({
+  rows,
+  onSort,
+}: {
+  rows: AnalyticsTopPost[];
+  onSort: (key: "title" | "platform" | "impressions" | "engagements" | "rate") => void;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[700px] text-sm">
+        <thead className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+          <tr>
+            <th className="py-3 pr-4">
+              <button type="button" onClick={() => onSort("title")}>Post title</button>
+            </th>
+            <th className="px-4 py-3">
+              <button type="button" onClick={() => onSort("platform")}>Platform</button>
+            </th>
+            <th className="px-4 py-3 text-right">
+              <button type="button" onClick={() => onSort("impressions")}>Impressions</button>
+            </th>
+            <th className="px-4 py-3 text-right">
+              <button type="button" onClick={() => onSort("engagements")}>Engagements</button>
+            </th>
+            <th className="pl-4 py-3 text-right">
+              <button type="button" onClick={() => onSort("rate")}>Eng. Rate</button>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((post) => {
+            const rate = post.impressions > 0 ? (post.engagements / post.impressions) * 100 : 0;
+            return (
+              <tr key={post.postId} className="border-b border-border/60 last:border-b-0">
+                <td className="py-3 pr-4 font-medium">
+                  <span className="block max-w-[320px] truncate">{post.title}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <PlatformBadge platform={post.platform as Platform} />
+                </td>
+                <td className="px-4 py-3 text-right">{formatNumber(post.impressions)}</td>
+                <td className="px-4 py-3 text-right">{formatNumber(post.engagements)}</td>
+                <td className="pl-4 py-3 text-right">{rate.toFixed(1)}%</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function AnalyticsPage() {
-  const [range, setRange] = useState<Range>("30d");
-  const metrics = useAnalyticsStore((s) => s.metrics);
-  const chartData = useAnalyticsStore((s) => s.chartData);
-  const platformStats = useAnalyticsStore((s) => s.platformStats);
-  const loading = useAnalyticsStore((s) => s.loading);
-  const error = useAnalyticsStore((s) => s.error);
-  const fetchMetrics = useAnalyticsStore((s) => s.fetchMetrics);
-  const smartSuggestions = useAnalyticsStore((s) => s.smartSuggestions);
-  const fetchSmartSuggestions = useAnalyticsStore((s) => s.fetchSmartSuggestions);
-  const exportCSV = useAnalyticsStore((s) => s.exportCSV);
-  const setDateRange = useAnalyticsStore((s) => s.setDateRange);
+  const defaultRange = buildRange(30);
+  const [customFrom, setCustomFrom] = useState(defaultRange.from);
+  const [customTo, setCustomTo] = useState(defaultRange.to);
+  const [sortKey, setSortKey] = useState<"title" | "platform" | "impressions" | "engagements" | "rate">("engagements");
+
+  const preset = useAnalyticsStore((state) => state.preset);
+  const from = useAnalyticsStore((state) => state.from);
+  const to = useAnalyticsStore((state) => state.to);
+  const summary = useAnalyticsStore((state) => state.summary);
+  const previousSummary = useAnalyticsStore((state) => state.previousSummary);
+  const loading = useAnalyticsStore((state) => state.loading);
+  const error = useAnalyticsStore((state) => state.error);
+  const setRange = useAnalyticsStore((state) => state.setRange);
+  const fetchSummary = useAnalyticsStore((state) => state.fetchSummary);
 
   useEffect(() => {
-    setDateRange(range);
-    fetchMetrics();
-    fetchSmartSuggestions();
-  }, [range, setDateRange, fetchMetrics, fetchSmartSuggestions]);
+    void fetchSummary(from, to);
+  }, [fetchSummary, from, to]);
+
+  const platformSeries = useMemo(
+    () => summary?.byPlatform.map((entry) => entry.platform as Platform) ?? [],
+    [summary],
+  );
+
+  const topPosts = useMemo(() => {
+    const items = [...(summary?.topPosts ?? [])];
+    items.sort((a, b) => {
+      if (sortKey === "title") {
+        return a.title.localeCompare(b.title);
+      }
+      if (sortKey === "platform") {
+        return a.platform.localeCompare(b.platform);
+      }
+      if (sortKey === "impressions") {
+        return b.impressions - a.impressions;
+      }
+      if (sortKey === "engagements") {
+        return b.engagements - a.engagements;
+      }
+      const aRate = a.impressions > 0 ? a.engagements / a.impressions : 0;
+      const bRate = b.impressions > 0 ? b.engagements / b.impressions : 0;
+      return bRate - aRate;
+    });
+    return items;
+  }, [sortKey, summary]);
+
+  const reachData = useMemo(
+    () =>
+      (summary?.byPlatform ?? []).map((entry) => ({
+        name: entry.platform,
+        value: entry.impressions + entry.likes + entry.comments + entry.shares,
+      })),
+    [summary],
+  );
+
+  const stats = useMemo(() => {
+    if (!summary) {
+      return [];
+    }
+
+    const previous = previousSummary ?? {
+      totalImpressions: 0,
+      totalReach: 0,
+      totalEngagements: 0,
+    };
+
+    const engagementRate = summary.totalImpressions > 0
+      ? (summary.totalEngagements / summary.totalImpressions) * 100
+      : 0;
+    const previousRate = previous.totalImpressions > 0
+      ? (previous.totalEngagements / previous.totalImpressions) * 100
+      : 0;
+
+    return [
+      {
+        label: "Total Impressions",
+        value: formatNumber(summary.totalImpressions),
+        delta: formatDelta(summary.totalImpressions, previous.totalImpressions),
+      },
+      {
+        label: "Total Reach",
+        value: formatNumber(summary.totalReach),
+        delta: formatDelta(summary.totalReach, previous.totalReach),
+      },
+      {
+        label: "Total Engagements",
+        value: formatNumber(summary.totalEngagements),
+        delta: formatDelta(summary.totalEngagements, previous.totalEngagements),
+      },
+      {
+        label: "Engagement Rate",
+        value: `${engagementRate.toFixed(1)}%`,
+        delta: formatDelta(engagementRate, previousRate),
+      },
+    ];
+  }, [previousSummary, summary]);
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
-      {error && (
-        <div className="p-4 rounded-lg bg-destructive/15 border border-destructive/30 text-destructive text-sm">
-          {error}
-        </div>
-      )}
-
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className="space-y-6 p-4 md:p-6">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div>
           <h1 className="text-xl font-semibold">Analytics</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Track performance across all platforms.
+          <p className="mt-1 text-sm text-muted-foreground">
+            Performance snapshots, reach breakdowns, and top-performing content.
           </p>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Button
-            variant="outline"
-            onClick={() => fetchMetrics()}
-            disabled={loading}
-            className="h-11 md:h-8 gap-1.5 w-full sm:w-auto"
+        <div className="flex flex-col gap-3 xl:items-end">
+          <Tabs
+            value={preset}
+            onValueChange={(value) => {
+              const nextPreset = value as AnalyticsPreset;
+              if (nextPreset === "custom") {
+                setRange("custom", customFrom, customTo);
+                return;
+              }
+              const selected = PRESETS.find((item) => item.value === nextPreset);
+              const range = buildRange(selected?.days ?? 30);
+              setRange(nextPreset, range.from, range.to);
+            }}
           >
-            <RotateCw className={cn("size-3.5", loading && "animate-spin")} />
-            Refresh
-          </Button>
-          <Button
-            variant="outline"
-            onClick={exportCSV}
-            disabled={loading}
-            className="h-11 md:h-8 gap-1.5 w-full sm:w-auto"
-          >
-            <Download className="size-3.5" />
-            Export CSV
-          </Button>
-          <Tabs value={range} onValueChange={(v) => setRange(v as Range)}>
-            <TabsList className="h-11 md:h-8 w-full sm:w-auto">
-              {RANGES.map((item) => (
-                <TabsTrigger key={item} value={item} className="text-xs px-3 flex-1 sm:flex-none">
-                  {item}
+            <TabsList className="h-auto flex-wrap justify-start xl:justify-end">
+              {PRESETS.map((item) => (
+                <TabsTrigger key={item.value} value={item.value}>
+                  {item.label}
                 </TabsTrigger>
               ))}
             </TabsList>
           </Tabs>
+          {preset === "custom" && (
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input type="date" value={customFrom} onChange={(event) => setCustomFrom(event.target.value)} />
+              <Input type="date" value={customTo} onChange={(event) => setCustomTo(event.target.value)} />
+              <Button type="button" variant="outline" onClick={() => setRange("custom", customFrom, customTo)}>
+                Apply
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
-      {smartSuggestions && (
-        <Card className="p-4 space-y-3">
-          <h2 className="text-sm font-semibold">Smart Suggestions</h2>
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">Best times to post</p>
-            <div className="flex flex-wrap gap-2">
-              {smartSuggestions.bestTimes.map((time) => (
-                <span key={time} className="text-xs rounded-full border border-border px-2 py-1">
-                  {time}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">Top platforms</p>
-            <div className="flex flex-wrap gap-2">
-              {smartSuggestions.topPlatforms.map((platform) => (
-                <span key={platform} className="text-xs rounded-full border border-border px-2 py-1 capitalize">
-                  {platform}
-                </span>
-              ))}
-            </div>
-          </div>
-          <p className="text-sm">{smartSuggestions.weeklyInsight}</p>
-        </Card>
-      )}
-
-      {loading ? (
-        <Card className="p-8 text-center text-sm text-muted-foreground">Loading analytics...</Card>
-      ) : metrics.length === 0 ? (
-        <Card className="p-8 text-center">
-          <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-muted">
-            <BarChart3 className="size-5 text-muted-foreground" />
-          </div>
-          <p className="text-sm font-medium">No analytics yet</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Publish some posts to start seeing performance data.
-          </p>
-          <Button
-            variant="outline"
-            onClick={() => fetchMetrics()}
-            className="mt-4 h-11 md:h-9"
-          >
-            Refresh analytics
-          </Button>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <Card className="p-4 space-y-3">
-            <p className="text-sm font-medium">Impressions &amp; Engagements</p>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-                <defs>
-                  <linearGradient id="grad-imp" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="grad-eng" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f472b6" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#f472b6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#a1a1aa" }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "#a1a1aa" }} tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: "#a1a1aa" }} />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="Impressions" stroke="#38bdf8" fill="url(#grad-imp)" strokeWidth={2} dot={false} />
-                <Area type="monotone" dataKey="Engagements" stroke="#f472b6" fill="url(#grad-eng)" strokeWidth={2} dot={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </Card>
-
-          <Card className="p-4 space-y-3">
-            <p className="text-sm font-medium">Performance by Platform</p>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={platformStats} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#a1a1aa" }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "#a1a1aa" }} tickLine={false} axisLine={false} />
-                <Tooltip contentStyle={TOOLTIP_STYLE} labelStyle={{ color: "#a1a1aa" }} />
-                <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="impressions" name="Impressions" fill="#38bdf8" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="engagements" name="Engagements" fill="#f472b6" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </Card>
+      {error && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
         </div>
       )}
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {stats.map((stat) => (
+          <Card key={stat.label}>
+            <CardHeader className="gap-1">
+              <CardDescription>{stat.label}</CardDescription>
+              <CardTitle className="text-3xl">{stat.value}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className={stat.delta.positive ? "text-emerald-400" : "text-rose-400"}>
+                <span className="inline-flex items-center gap-1 text-xs font-medium">
+                  {stat.delta.positive ? <ArrowUpRight className="size-3.5" /> : <ArrowDownRight className="size-3.5" />}
+                  {Math.abs(stat.delta.value).toFixed(1)}% vs previous period
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {loading && !summary ? (
+        <Card>
+          <CardContent className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+            <Loader2 className="mr-2 size-4 animate-spin" />
+            Loading analytics...
+          </CardContent>
+        </Card>
+      ) : summary ? (
+        <>
+          <div className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Impressions over time</CardTitle>
+                <CardDescription>One area per connected platform.</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={summary.byDayPlatform} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      {platformSeries.map((platform) => (
+                        <linearGradient key={platform} id={`gradient-${platform}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={PLATFORM_HEX[platform]} stopOpacity={0.35} />
+                          <stop offset="95%" stopColor={PLATFORM_HEX[platform]} stopOpacity={0.05} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <CartesianGrid stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={TOOLTIP_STYLE} />
+                    <Legend />
+                    {platformSeries.map((platform) => (
+                      <Area
+                        key={platform}
+                        type="monotone"
+                        dataKey={platform}
+                        stroke={PLATFORM_HEX[platform]}
+                        fill={`url(#gradient-${platform})`}
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    ))}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Reach breakdown</CardTitle>
+                <CardDescription>Share of total reach by platform.</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={reachData} dataKey="value" nameKey="name" innerRadius={72} outerRadius={108} paddingAngle={2}>
+                      {reachData.map((entry) => (
+                        <Cell key={entry.name} fill={PLATFORM_HEX[entry.name as Platform] ?? "#94a3b8"} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={TOOLTIP_STYLE} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Platform breakdown</CardTitle>
+                <CardDescription>Grouped performance by connected network.</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={summary.byPlatform} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+                    <XAxis dataKey="platform" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={TOOLTIP_STYLE} />
+                    <Legend />
+                    <Bar dataKey="impressions" fill="#60a5fa" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="likes" fill="#f472b6" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="comments" fill="#34d399" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="shares" fill="#fbbf24" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Daily totals</CardTitle>
+                <CardDescription>All-platform impressions and engagements.</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={summary.byDay} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="daily-impressions" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#60a5fa" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#60a5fa" stopOpacity={0.05} />
+                      </linearGradient>
+                      <linearGradient id="daily-engagements" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#34d399" stopOpacity={0.35} />
+                        <stop offset="95%" stopColor="#34d399" stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+                    <XAxis dataKey="date" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={TOOLTIP_STYLE} />
+                    <Legend />
+                    <Area type="monotone" dataKey="impressions" stroke="#60a5fa" fill="url(#daily-impressions)" strokeWidth={2} dot={false} />
+                    <Area type="monotone" dataKey="engagements" stroke="#34d399" fill="url(#daily-engagements)" strokeWidth={2} dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Top performing posts</CardTitle>
+              <CardDescription>Sorted by the metric you care about most.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TopPostsTable rows={topPosts} onSort={setSortKey} />
+            </CardContent>
+          </Card>
+        </>
+      ) : null}
     </div>
   );
 }

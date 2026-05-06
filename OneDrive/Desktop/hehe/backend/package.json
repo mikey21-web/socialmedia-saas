@@ -79,6 +79,7 @@
     "prisma": "^6.19.3",
     "reflect-metadata": "^0.2.2",
     "replicate": "^1.4.0",
+    "rss-parser": "^3.13.0",
     "rxjs": "^7.8.2",
     "stripe": "^22.1.0",
     "twitter-api-v2": "^1.29.0"

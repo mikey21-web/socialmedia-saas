@@ -3,7 +3,19 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BarChart2, Calendar, LayoutDashboard, Menu, Settings, X, FileText, FolderKanban } from "lucide-react";
+import {
+  BarChart2,
+  Calendar,
+  FileImage,
+  FileText,
+  FolderKanban,
+  LayoutDashboard,
+  Menu,
+  Repeat2,
+  Rss,
+  Settings,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
@@ -12,16 +24,24 @@ const navItems = [
   { href: "/dashboard",  label: "Dashboard", icon: LayoutDashboard },
   { href: "/posts",      label: "Posts",     icon: FileText },
   { href: "/calendar",   label: "Calendar",  icon: Calendar },
+  { href: "/media",      label: "Media Library", icon: FileImage },
+  { href: "/recurring",  label: "Recurring", icon: Repeat2 },
+  { href: "/rss",        label: "RSS Feeds", icon: Rss },
   { href: "/sets",       label: "Sets",      icon: FolderKanban },
   { href: "/analytics",  label: "Analytics", icon: BarChart2 },
   { href: "/settings",   label: "Settings",  icon: Settings },
 ];
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-
-  const Nav = ({ mobile = false }: { mobile?: boolean }) => (
+function DashboardNav({
+  pathname,
+  mobile = false,
+  onNavigate,
+}: {
+  pathname: string;
+  mobile?: boolean;
+  onNavigate: () => void;
+}) {
+  return (
     <nav className={cn("flex-1 p-3 space-y-1", mobile && "pt-2")}>
       {navItems.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
@@ -29,7 +49,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Link
             key={href}
             href={href}
-            onClick={() => setOpen(false)}
+            onClick={onNavigate}
             className={cn(
               "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
               active
@@ -44,6 +64,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       })}
     </nav>
   );
+}
+
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
 
   return (
     <div className="flex h-dvh bg-background">
@@ -51,7 +76,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <div className="h-14 flex items-center px-5 border-b border-border">
           <span className="font-semibold text-sm">Postiz</span>
         </div>
-        <Nav />
+        <DashboardNav pathname={pathname} onNavigate={() => setOpen(false)} />
       </aside>
 
       <div className="flex-1 overflow-hidden flex flex-col">
@@ -68,7 +93,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {open && (
           <div className="md:hidden border-b border-border bg-sidebar">
-            <Nav mobile />
+            <DashboardNav pathname={pathname} mobile onNavigate={() => setOpen(false)} />
           </div>
         )}
 

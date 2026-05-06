@@ -11,7 +11,7 @@ import { tokenRefreshWorkflow } from '../publishing/workflows/token-refresh.work
 import { PrismaService } from '../prisma/prisma.service';
 import { TemporalClientService } from '../temporal/client';
 
-const SUPPORTED_PLATFORMS = ['x', 'twitter', 'instagram', 'linkedin', 'facebook', 'youtube'] as const;
+const SUPPORTED_PLATFORMS = ['x', 'twitter', 'instagram', 'linkedin', 'facebook', 'youtube', 'tiktok'] as const;
 type SupportedPlatform = (typeof SUPPORTED_PLATFORMS)[number];
 
 export type PlatformTokenPayload = {
@@ -245,6 +245,7 @@ export class PlatformsService {
       linkedin: 'https://www.linkedin.com/oauth/v2/accessToken',
       facebook: 'https://graph.facebook.com/v19.0/oauth/access_token',
       youtube: 'https://oauth2.googleapis.com/token',
+      tiktok: 'https://open.tiktokapis.com/v2/oauth/token/',
     };
 
     const tokenEndpoint = tokenEndpointByPlatform[platform];
@@ -259,6 +260,26 @@ export class PlatformsService {
       url.searchParams.set('access_token', refreshToken);
 
       const response = await fetch(url, { method: 'GET' });
+      const payload = await this.extractJson(response);
+      return this.normalizeTokenResponse(payload);
+    }
+
+    if (platform === 'tiktok') {
+      const body = new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_key: clientId,
+        client_secret: clientSecret,
+      });
+
+      const response = await fetch(tokenEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body,
+      });
+
       const payload = await this.extractJson(response);
       return this.normalizeTokenResponse(payload);
     }
@@ -382,6 +403,7 @@ export class PlatformsService {
       linkedin: 'LINKEDIN',
       facebook: 'FACEBOOK',
       youtube: 'YOUTUBE',
+      tiktok: 'TIKTOK',
     };
 
     const prefix = envPrefixByPlatform[platform];

@@ -28,6 +28,11 @@ type AnalyticsActivities = {
     postId: string;
     userId: string;
   }) => Promise<AnalyticsMetricRecord>;
+  collectAnalyticsTikTok: (input: {
+    externalId: string;
+    postId: string;
+    userId: string;
+  }) => Promise<AnalyticsMetricRecord>;
   collectAnalyticsFacebook: (input: {
     externalId: string;
     postId: string;
@@ -92,6 +97,13 @@ export async function collectAnalyticsWorkflow(input: CollectAnalyticsWorkflowIn
           userId: context.userId,
         });
       }
+      if (entry.platform === 'tiktok') {
+        return activities.collectAnalyticsTikTok({
+          externalId: entry.externalId,
+          postId: context.postId,
+          userId: context.userId,
+        });
+      }
       return {
         platform: entry.platform,
         externalId: entry.externalId,
@@ -110,8 +122,9 @@ export async function collectAnalyticsWorkflow(input: CollectAnalyticsWorkflowIn
       engagements: acc.engagements + (metric.engagements ?? 0),
       likes: acc.likes + (metric.likes ?? 0),
       comments: acc.comments + (metric.comments ?? 0),
+      shares: acc.shares + (metric.shares ?? 0),
     }),
-    { impressions: 0, engagements: 0, likes: 0, comments: 0 },
+    { impressions: 0, engagements: 0, likes: 0, comments: 0, shares: 0 },
   );
 
   return {

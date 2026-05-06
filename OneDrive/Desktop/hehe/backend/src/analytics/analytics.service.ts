@@ -1,9 +1,167 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class AnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async getSummary(input: {
+    teamId: string;
+    requestedTeamId?: string;
+    from?: string;
+    to?: string;
+  }) {
+    if (input.requestedTeamId && input.requestedTeamId !== input.teamId) {
+      throw new ForbiddenException('You do not have access to this team');
+    }
+
+    const range = this.resolveDateRange(input.from, input.to);
+    const posts = await this.prisma.post.findMany({
+      where: {
+        teamId: input.teamId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        title: true,
+        platforms: {
+          select: {
+            platform: true,
+          },
+        },
+        analytics: {
+          where: {
+            collectedAt: {
+              gte: range.from,
+              lte: range.to,
+            },
+          },
+          select: {
+            count: true,
+            eventType: true,
+            collectedAt: true,
+          },
+        },
+      },
+    });
+
+    const byPlatformMap = new Map<string, {
+      platform: string;
+      impressions: number;
+      likes: number;
+      comments: number;
+      shares: number;
+      reach: number;
+      engagements: number;
+    }>();
+    const byDayMap = new Map<string, { date: string; impressions: number; engagements: number }>();
+    const byDayPlatformMap = new Map<string, Record<string, number | string>>();
+    const topPostsMap = new Map<string, {
+      postId: string;
+      title: string;
+      platform: string;
+      impressions: number;
+      engagements: number;
+    }>();
+
+    for (const post of posts) {
+      const fallbackPlatform = post.platforms[0]?.platform ?? 'unknown';
+      const topEntry = topPostsMap.get(post.id) ?? {
+        postId: post.id,
+        title: post.title,
+        platform: fallbackPlatform,
+        impressions: 0,
+        engagements: 0,
+      };
+
+      for (const event of post.analytics) {
+        const { platform, metric } = this.parseEventType(event.eventType, fallbackPlatform);
+        const normalizedMetric = this.normalizeMetric(metric);
+        if (!normalizedMetric) {
+          continue;
+        }
+
+        const platformEntry = byPlatformMap.get(platform) ?? {
+          platform,
+          impressions: 0,
+          likes: 0,
+          comments: 0,
+          shares: 0,
+          reach: 0,
+          engagements: 0,
+        };
+
+        if (normalizedMetric === 'impressions') {
+          platformEntry.impressions += event.count;
+          topEntry.impressions += event.count;
+        } else if (normalizedMetric === 'reach') {
+          platformEntry.reach += event.count;
+        } else if (normalizedMetric === 'likes') {
+          platformEntry.likes += event.count;
+          platformEntry.engagements += event.count;
+          topEntry.engagements += event.count;
+        } else if (normalizedMetric === 'comments') {
+          platformEntry.comments += event.count;
+          platformEntry.engagements += event.count;
+          topEntry.engagements += event.count;
+        } else if (normalizedMetric === 'shares') {
+          platformEntry.shares += event.count;
+          platformEntry.engagements += event.count;
+          topEntry.engagements += event.count;
+        } else if (normalizedMetric === 'engagements') {
+          platformEntry.engagements += event.count;
+          topEntry.engagements += event.count;
+        }
+
+        byPlatformMap.set(platform, platformEntry);
+
+        const date = event.collectedAt.toISOString().slice(0, 10);
+        const dayEntry = byDayMap.get(date) ?? { date, impressions: 0, engagements: 0 };
+        if (normalizedMetric === 'impressions') {
+          dayEntry.impressions += event.count;
+        }
+        if (normalizedMetric === 'engagements' || normalizedMetric === 'likes' || normalizedMetric === 'comments' || normalizedMetric === 'shares') {
+          dayEntry.engagements += event.count;
+        }
+        byDayMap.set(date, dayEntry);
+
+        const dailyPlatformEntry = byDayPlatformMap.get(date) ?? { date };
+        if (normalizedMetric === 'impressions') {
+          const currentValue = typeof dailyPlatformEntry[platform] === 'number'
+            ? (dailyPlatformEntry[platform] as number)
+            : 0;
+          dailyPlatformEntry[platform] = currentValue + event.count;
+        }
+        byDayPlatformMap.set(date, dailyPlatformEntry);
+      }
+
+      topPostsMap.set(post.id, topEntry);
+    }
+
+    const byPlatform = Array.from(byPlatformMap.values()).sort((a, b) => a.platform.localeCompare(b.platform));
+    const totalImpressions = byPlatform.reduce((sum, item) => sum + item.impressions, 0);
+    const totalReach = byPlatform.reduce((sum, item) => sum + item.reach, 0);
+    const totalEngagements = byPlatform.reduce((sum, item) => sum + item.engagements, 0);
+
+    return {
+      totalImpressions,
+      totalEngagements,
+      totalReach,
+      byPlatform: byPlatform.map(({ reach: _reach, engagements: _engagements, ...item }) => item),
+      byDay: Array.from(byDayMap.values()).sort((a, b) => a.date.localeCompare(b.date)),
+      byDayPlatform: Array.from(byDayPlatformMap.values()).sort((a, b) =>
+        String(a.date).localeCompare(String(b.date)),
+      ),
+      topPosts: Array.from(topPostsMap.values())
+        .sort((a, b) => {
+          if (b.engagements !== a.engagements) {
+            return b.engagements - a.engagements;
+          }
+          return b.impressions - a.impressions;
+        })
+        .slice(0, 10),
+    };
+  }
 
   async recordEvent(input: {
     postId?: string;
@@ -294,5 +452,49 @@ export class AnalyticsService {
       contentTips,
       weeklyInsight,
     };
+  }
+
+  private resolveDateRange(from?: string, to?: string) {
+    const end = to ? new Date(to) : new Date();
+    const start = from ? new Date(from) : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    return { from: start, to: end };
+  }
+
+  private parseEventType(eventType: string, fallbackPlatform: string) {
+    const [first, second] = eventType.split(':');
+    if (!second) {
+      return {
+        platform: fallbackPlatform,
+        metric: first,
+      };
+    }
+    return {
+      platform: first,
+      metric: second,
+    };
+  }
+
+  private normalizeMetric(metric: string) {
+    const normalized = metric.toLowerCase();
+    if (normalized === 'impression' || normalized === 'impressions' || normalized === 'view' || normalized === 'views') {
+      return 'impressions';
+    }
+    if (normalized === 'reach') {
+      return 'reach';
+    }
+    if (normalized === 'like' || normalized === 'likes') {
+      return 'likes';
+    }
+    if (normalized === 'comment' || normalized === 'comments' || normalized === 'reply' || normalized === 'replies') {
+      return 'comments';
+    }
+    if (normalized === 'share' || normalized === 'shares' || normalized === 'retweet' || normalized === 'retweets') {
+      return 'shares';
+    }
+    if (normalized === 'engagement' || normalized === 'engagements') {
+      return 'engagements';
+    }
+    return null;
   }
 }

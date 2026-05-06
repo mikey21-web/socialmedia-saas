@@ -2,8 +2,12 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
+  Get,
+  Patch,
   Post,
-  Req,
+  Query,
+  Param,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -11,6 +15,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../auth/jwt.guard';
+import { TeamId } from '../common/decorators/team.decorator';
 import { MediaService, UploadedFile as MediaUploadedFile } from './media.service';
 
 @UseGuards(JwtAuthGuard)
@@ -20,24 +25,72 @@ export class MediaController {
 
   @Post('upload')
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
-  async upload(@UploadedFile() file: MediaUploadedFile) {
+  async upload(
+    @TeamId() teamId: string | undefined,
+    @UploadedFile() file: MediaUploadedFile,
+  ) {
+    if (!teamId) throw new BadRequestException('Missing team context');
     if (!file) throw new BadRequestException('No file provided');
-    this.mediaService.validateMimeType(file.mimetype);
-    const url = await this.mediaService.uploadToS3(file);
-    return { url };
+    return this.mediaService.uploadFile(teamId, file);
   }
 
   @Post('generate')
-  async generateImage(@Body() body: { prompt: string }) {
+  async generateImage(
+    @TeamId() teamId: string | undefined,
+    @Body() body: { prompt: string },
+  ) {
+    if (!teamId) throw new BadRequestException('Missing team context');
     if (!body.prompt) throw new BadRequestException('prompt required');
-    const url = await this.mediaService.generateImage(body.prompt);
-    return { url };
+    return this.mediaService.generateImage(teamId, body.prompt);
   }
 
   @Post('generate-video')
-  async generateVideo(@Body() body: { prompt: string; duration?: number }) {
+  async generateVideo(
+    @TeamId() teamId: string | undefined,
+    @Body() body: { prompt: string; duration?: number },
+  ) {
+    if (!teamId) throw new BadRequestException('Missing team context');
     if (!body.prompt) throw new BadRequestException('prompt required');
-    const url = await this.mediaService.generateVideo(body.prompt, body.duration);
-    return { url };
+    return this.mediaService.generateVideo(teamId, body.prompt, body.duration);
+  }
+
+  @Get('assets')
+  listAssets(
+    @TeamId() teamId: string | undefined,
+    @Query('source') source?: string,
+    @Query('tag') tag?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.mediaService.listAssets(teamId, {
+      source,
+      tag,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
+  }
+
+  @Delete('assets/:id')
+  deleteAsset(
+    @TeamId() teamId: string | undefined,
+    @Param('id') id: string,
+  ) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.mediaService.deleteAsset(teamId, id);
+  }
+
+  @Patch('assets/:id/tags')
+  updateAssetTags(
+    @TeamId() teamId: string | undefined,
+    @Param('id') id: string,
+    @Body() body: { action?: 'add' | 'remove'; tag?: string },
+  ) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    if (!body.tag) throw new BadRequestException('tag required');
+    if (body.action === 'remove') {
+      return this.mediaService.removeTag(teamId, id, body.tag);
+    }
+    return this.mediaService.addTag(teamId, id, body.tag);
   }
 }

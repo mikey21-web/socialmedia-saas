@@ -3,6 +3,7 @@ import { PlatformsService } from '../../platforms/platforms.service';
 import { buildCollectAnalyticsFacebookActivity } from './collect-analytics-facebook';
 import { buildCollectAnalyticsInstagramActivity } from './collect-analytics-instagram';
 import { buildCollectAnalyticsLinkedInActivity } from './collect-analytics-linkedin';
+import { buildCollectAnalyticsTikTokActivity } from './collect-analytics-tiktok';
 import { buildCollectAnalyticsTwitterActivity } from './collect-analytics-twitter';
 import { buildCollectAnalyticsYouTubeActivity } from './collect-analytics-youtube';
 import { AnalyticsMetricRecord } from '../types';
@@ -60,6 +61,7 @@ export function createAnalyticsActivities(
     collectAnalyticsLinkedIn: buildCollectAnalyticsLinkedInActivity(platformsService),
     collectAnalyticsFacebook: buildCollectAnalyticsFacebookActivity(platformsService),
     collectAnalyticsYouTube: buildCollectAnalyticsYouTubeActivity(platformsService),
+    collectAnalyticsTikTok: buildCollectAnalyticsTikTokActivity(platformsService),
     persistAnalyticsMetrics: async (input: {
       postId: string;
       metrics: AnalyticsMetricRecord[];
@@ -70,6 +72,7 @@ export function createAnalyticsActivities(
           { metric: 'engagements', value: metric.engagements },
           { metric: 'likes', value: metric.likes },
           { metric: 'comments', value: metric.comments },
+          { metric: 'shares', value: metric.shares },
           { metric: 'clicks', value: metric.clicks },
           { metric: 'followers_growth', value: metric.followers_growth },
         ];

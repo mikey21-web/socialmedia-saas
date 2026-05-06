@@ -14,7 +14,7 @@ import { UpdatePostDto } from './dto/update-post.dto';
 import { PublishingService } from '../publishing/publishing.service';
 import { TeamsService } from '../teams/teams.service';
 
-const VALID_PLATFORMS = ['twitter', 'instagram', 'linkedin', 'facebook'] as const;
+const VALID_PLATFORMS = ['twitter', 'instagram', 'linkedin', 'facebook', 'youtube', 'tiktok'] as const;
 type SupportedPlatform = (typeof VALID_PLATFORMS)[number];
 
 @Injectable()
@@ -140,6 +140,7 @@ export class PostsService {
       where: {
         teamId,
         deletedAt: null,
+        ...(query.status ? { status: query.status } : {}),
       },
       include: {
         platforms: {
@@ -156,6 +157,7 @@ export class PostsService {
     return {
       posts: posts.map((post) => ({
         id: post.id,
+        title: post.title,
         content: post.content,
         mediaUrls: post.mediaUrls,
         platforms: post.platforms,
@@ -200,6 +202,21 @@ export class PostsService {
     }
 
     const scheduledAt = dto.scheduledAt ? this.parseScheduledAt(dto.scheduledAt) : undefined;
+    const recurrenceEndAt = dto.recurrenceEndAt
+      ? this.parseScheduledAt(dto.recurrenceEndAt)
+      : dto.recurrenceEndAt === null
+        ? null
+        : undefined;
+    const recurrencePattern = dto.recurrencePattern?.trim();
+    const isRecurring = dto.isRecurring;
+    const nextPublishAt = isRecurring === undefined
+      ? undefined
+      : this.computeNextPublishAt(
+        isRecurring,
+        recurrencePattern ?? post.recurrencePattern,
+        scheduledAt ?? post.scheduledAt ?? new Date(),
+        recurrenceEndAt ?? post.recurrenceEndAt,
+      );
 
     const updatedPost = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.post.update({
@@ -209,6 +226,10 @@ export class PostsService {
           mediaUrls: dto.mediaUrls,
           status: dto.status,
           scheduledAt,
+          isRecurring,
+          recurrencePattern,
+          recurrenceEndAt,
+          nextPublishAt,
         },
       });
 
@@ -241,6 +262,59 @@ export class PostsService {
       createdAt: updatedPost.createdAt,
       scheduledAt: updatedPost.scheduledAt,
     };
+  }
+
+  async listRecurringPosts(teamId: string | undefined) {
+    if (!teamId) {
+      throw new ForbiddenException('Missing team context');
+    }
+
+    const posts = await this.prisma.post.findMany({
+      where: {
+        teamId,
+        isRecurring: true,
+        deletedAt: null,
+      },
+      include: {
+        platforms: {
+          select: {
+            platform: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: [
+        { nextPublishAt: 'asc' },
+        { createdAt: 'desc' },
+      ],
+    });
+
+    return {
+      posts,
+    };
+  }
+
+  async deletePost(user: AuthenticatedRequestUser, postId: string) {
+    const teamId = await this.resolveTeamId(user.userId, user.team_id);
+    const post = await this.prisma.post.findFirst({
+      where: {
+        id: postId,
+        teamId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
+    await this.prisma.post.update({
+      where: { id: postId },
+      data: { deletedAt: new Date() },
+    });
+
+    return { success: true };
   }
 
   private async resolveTeamId(userId: string, teamId?: string) {

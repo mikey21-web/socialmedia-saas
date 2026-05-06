@@ -21,6 +21,7 @@ type PublishActivities = {
   publishLinkedIn: (input: PublishActivityInput) => Promise<PublishActivityResult>;
   publishFacebook: (input: PublishActivityInput) => Promise<PublishActivityResult>;
   publishYouTube: (input: PublishActivityInput) => Promise<PublishActivityResult>;
+  publishTikTok: (input: PublishActivityInput) => Promise<PublishActivityResult>;
   finalizePublishPost: (input: {
     postId: string;
     teamId: string;
@@ -78,6 +79,10 @@ export async function publishPostWorkflow(input: PublishWorkflowInput) {
         if (job.platform === 'youtube') {
           const result = await activities.publishYouTube(payload);
           return { ...result, platform: 'youtube', postPlatformId: job.postPlatformId };
+        }
+        if (job.platform === 'tiktok') {
+          const result = await activities.publishTikTok(payload);
+          return { ...result, platform: 'tiktok', postPlatformId: job.postPlatformId };
         }
         return {
           success: false,

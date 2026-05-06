@@ -4,10 +4,18 @@ import { MediaService, UploadedFile } from './media.service';
 import { BadRequestException } from '@nestjs/common';
 
 const mockService = {
-  validateMimeType: jest.fn(),
-  uploadToS3: jest.fn().mockResolvedValue('https://s3.example.com/test.jpg'),
-  generateImage: jest.fn().mockResolvedValue('https://replicate.delivery/test.jpg'),
-  generateVideo: jest.fn().mockResolvedValue('https://replicate.delivery/test.mp4'),
+  uploadFile: jest.fn().mockResolvedValue({
+    url: 'https://s3.example.com/test.jpg',
+    asset: { id: 'asset_1' },
+  }),
+  generateImage: jest.fn().mockResolvedValue({
+    url: 'https://replicate.delivery/test.jpg',
+    asset: { id: 'asset_2' },
+  }),
+  generateVideo: jest.fn().mockResolvedValue({
+    url: 'https://replicate.delivery/test.mp4',
+    asset: { id: 'asset_3' },
+  }),
 };
 
 describe('MediaController', () => {
@@ -32,32 +40,40 @@ describe('MediaController', () => {
         buffer: Buffer.from('data'),
         size: 4,
       };
-      const result = await controller.upload(file);
-      expect(mockService.validateMimeType).toHaveBeenCalledWith('image/jpeg');
-      expect(mockService.uploadToS3).toHaveBeenCalledWith(file);
-      expect(result).toEqual({ url: 'https://s3.example.com/test.jpg' });
+      const result = await controller.upload('team_1', file);
+      expect(mockService.uploadFile).toHaveBeenCalledWith('team_1', file);
+      expect(result).toEqual({
+        url: 'https://s3.example.com/test.jpg',
+        asset: { id: 'asset_1' },
+      });
     });
 
     it('throws when no file provided', async () => {
-      await expect(controller.upload(undefined as any)).rejects.toThrow(BadRequestException);
+      await expect(controller.upload('team_1', undefined as never)).rejects.toThrow(BadRequestException);
     });
   });
 
   describe('generateImage', () => {
     it('returns url from Replicate', async () => {
-      const result = await controller.generateImage({ prompt: 'a red fox' });
-      expect(result).toEqual({ url: 'https://replicate.delivery/test.jpg' });
+      const result = await controller.generateImage('team_1', { prompt: 'a red fox' });
+      expect(result).toEqual({
+        url: 'https://replicate.delivery/test.jpg',
+        asset: { id: 'asset_2' },
+      });
     });
 
     it('throws when prompt missing', async () => {
-      await expect(controller.generateImage({ prompt: '' })).rejects.toThrow(BadRequestException);
+      await expect(controller.generateImage('team_1', { prompt: '' })).rejects.toThrow(BadRequestException);
     });
   });
 
   describe('generateVideo', () => {
     it('returns url from Replicate', async () => {
-      const result = await controller.generateVideo({ prompt: 'a sunset timelapse' });
-      expect(result).toEqual({ url: 'https://replicate.delivery/test.mp4' });
+      const result = await controller.generateVideo('team_1', { prompt: 'a sunset timelapse' });
+      expect(result).toEqual({
+        url: 'https://replicate.delivery/test.mp4',
+        asset: { id: 'asset_3' },
+      });
     });
   });
 });

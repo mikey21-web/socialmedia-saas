@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-export type Platform = "twitter" | "instagram" | "linkedin" | "facebook" | "youtube";
+export type Platform = "twitter" | "instagram" | "linkedin" | "facebook" | "youtube" | "tiktok";
 
 export const PLATFORM_STYLES: Record<Platform, string> = {
   twitter:   "bg-sky-500/15 text-sky-400 border-sky-500/30",
@@ -8,6 +8,7 @@ export const PLATFORM_STYLES: Record<Platform, string> = {
   linkedin:  "bg-blue-500/15 text-blue-400 border-blue-500/30",
   facebook:  "bg-indigo-500/15 text-indigo-400 border-indigo-500/30",
   youtube:   "bg-red-500/15 text-red-400 border-red-500/30",
+  tiktok:    "bg-slate-900/80 text-white border-slate-700",
 };
 
 export const PLATFORM_DOTS: Record<Platform, string> = {
@@ -16,6 +17,7 @@ export const PLATFORM_DOTS: Record<Platform, string> = {
   linkedin:  "bg-blue-400",
   facebook:  "bg-indigo-400",
   youtube:   "bg-red-400",
+  tiktok:    "bg-white",
 };
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
@@ -24,6 +26,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   linkedin:  "LinkedIn",
   facebook:  "Facebook",
   youtube:   "YouTube",
+  tiktok:    "TikTok",
 };
 
 interface Props {

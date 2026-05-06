@@ -39,14 +39,17 @@ export default function BillingSettingsPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const stripeStatus = params.get("stripe");
-    if (stripeStatus === "success") {
-      setSuccessMessage("Billing updated successfully.");
-      setPlan("pro");
-    } else if (stripeStatus === "cancel") {
-      setError("Checkout canceled. No charges were made.");
-    }
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      const stripeStatus = params.get("stripe");
+      if (stripeStatus === "success") {
+        setSuccessMessage("Billing updated successfully.");
+        setPlan("pro");
+      } else if (stripeStatus === "cancel") {
+        setError("Checkout canceled. No charges were made.");
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const currentLabel = useMemo(() => (plan === "pro" ? "Pro" : "Free"), [plan]);

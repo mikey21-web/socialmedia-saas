@@ -36,6 +36,8 @@ model Team {
   subscription      Subscription?
   postSets          PostSet[]
   thirdParties      ThirdPartyIntegration[]
+  mediaAssets       MediaAsset[]
+  rssSources        RssSource[]
 
   @@index([ownerId])
 }
@@ -194,5 +196,41 @@ model ThirdPartyIntegration {
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@unique([teamId, identifier])
+  @@index([teamId])
+}
+
+model MediaAsset {
+  id        String   @id @default(cuid())
+  teamId    String
+  url       String
+  filename  String
+  mimeType  String
+  size      Int      @default(0)
+  width     Int?
+  height    Int?
+  source    String   @default("upload")
+  tags      String[] @default([])
+  createdAt DateTime @default(now())
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([teamId, source])
+}
+
+model RssSource {
+  id          String   @id @default(cuid())
+  teamId      String
+  url         String
+  name        String?
+  platforms   String[] @default([])
+  autoPublish Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  lastFetchAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   @@index([teamId])
 }

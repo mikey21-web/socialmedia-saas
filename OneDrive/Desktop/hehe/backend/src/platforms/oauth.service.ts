@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PlatformsService } from './platforms.service';
 
-type OAuthPlatform = 'x' | 'instagram' | 'linkedin' | 'facebook' | 'youtube';
+type OAuthPlatform = 'x' | 'instagram' | 'linkedin' | 'facebook' | 'youtube' | 'tiktok';
 
 type OAuthStateEntry = {
   userId: string;
@@ -89,6 +89,14 @@ export class OauthService {
       authorizeUrl.searchParams.set('state', state);
       authorizeUrl.searchParams.set('access_type', 'offline');
       authorizeUrl.searchParams.set('prompt', 'consent');
+    } else if (normalizedPlatform === 'tiktok') {
+      const clientId = this.readOAuthEnv('tiktok', 'CLIENT_ID');
+      authorizeUrl = new URL('https://www.tiktok.com/v2/auth/authorize/');
+      authorizeUrl.searchParams.set('client_key', clientId);
+      authorizeUrl.searchParams.set('response_type', 'code');
+      authorizeUrl.searchParams.set('redirect_uri', callbackUrl);
+      authorizeUrl.searchParams.set('scope', 'user.info.basic,video.publish,video.upload');
+      authorizeUrl.searchParams.set('state', state);
     } else {
       // facebook AND instagram both go through Facebook OAuth
       const facebookScopes =
@@ -159,6 +167,12 @@ export class OauthService {
         channelInfo.title,
       );
       return { connected: true, platform: 'youtube' };
+    }
+
+    if (platform === 'tiktok') {
+      const tokenPayload = await this.exchangeTikTokCode(params.code);
+      await this.platformsService.storeCredential(userId, 'tiktok', tokenPayload, 'default', 'TikTok');
+      return { connected: true, platform: 'tiktok' };
     }
 
     // facebook or instagram — both exchange via Facebook OAuth
@@ -262,6 +276,27 @@ export class OauthService {
         redirect_uri: callbackUrl,
         client_id: clientId,
         client_secret: clientSecret,
+      }),
+    });
+
+    const payload = await this.extractJson(response);
+    return this.normalizeTokenResponse(payload);
+  }
+
+  private async exchangeTikTokCode(code: string) {
+    const callbackUrl = this.getCallbackUrl();
+    const clientId = this.readOAuthEnv('tiktok', 'CLIENT_ID');
+    const clientSecret = this.readOAuthEnv('tiktok', 'CLIENT_SECRET');
+
+    const response = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_key: clientId,
+        client_secret: clientSecret,
+        code,
+        grant_type: 'authorization_code',
+        redirect_uri: callbackUrl,
       }),
     });
 
@@ -419,7 +454,7 @@ export class OauthService {
 
   private normalizePlatform(platform: string): OAuthPlatform {
     const p = platform.toLowerCase();
-    if (p !== 'x' && p !== 'instagram' && p !== 'linkedin' && p !== 'facebook' && p !== 'youtube') {
+    if (p !== 'x' && p !== 'instagram' && p !== 'linkedin' && p !== 'facebook' && p !== 'youtube' && p !== 'tiktok') {
       throw new BadRequestException(`Unsupported platform: ${platform}`);
     }
     return p;

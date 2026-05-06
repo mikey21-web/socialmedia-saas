@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Patch,
   Param,
@@ -11,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/jwt.guard';
+import { TeamId } from '../common/decorators/team.decorator';
 import { SubscriptionFeatureLimit } from '../common/decorators/subscription-feature.decorator';
 import { SubscriptionGuard } from '../common/guards/subscription.guard';
 import { PostsService } from './posts.service';
@@ -42,6 +44,11 @@ export class PostsController {
     return this.postsService.listPosts(req.user, query);
   }
 
+  @Get('recurring')
+  listRecurringPosts(@TeamId() teamId: string | undefined) {
+    return this.postsService.listRecurringPosts(teamId);
+  }
+
   @Get(':id')
   getPostById(
     @Req() req: { user: AuthenticatedRequestUser },
@@ -57,5 +64,13 @@ export class PostsController {
     @Body() dto: UpdatePostDto,
   ) {
     return this.postsService.updatePost(req.user, postId, dto);
+  }
+
+  @Delete(':id')
+  deletePost(
+    @Req() req: { user: AuthenticatedRequestUser },
+    @Param('id') postId: string,
+  ) {
+    return this.postsService.deletePost(req.user, postId);
   }
 }
