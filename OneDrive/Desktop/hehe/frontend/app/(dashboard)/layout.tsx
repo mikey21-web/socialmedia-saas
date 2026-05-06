@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AuthGuard } from "@/components/auth-guard";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -71,7 +72,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="flex h-dvh bg-background">
+    <AuthGuard>
+      <div className="flex h-dvh bg-background">
       <aside className="hidden md:flex w-60 shrink-0 border-r border-border bg-sidebar flex-col">
         <div className="h-14 flex items-center px-5 border-b border-border">
           <span className="font-semibold text-sm">Postiz</span>
@@ -100,5 +102,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <main className="flex-1 overflow-auto bg-background">{children}</main>
       </div>
     </div>
+    </AuthGuard>
   );
 }
