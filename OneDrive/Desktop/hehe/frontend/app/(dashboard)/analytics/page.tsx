@@ -38,13 +38,16 @@ export default function AnalyticsPage() {
   const loading = useAnalyticsStore((s) => s.loading);
   const error = useAnalyticsStore((s) => s.error);
   const fetchMetrics = useAnalyticsStore((s) => s.fetchMetrics);
+  const smartSuggestions = useAnalyticsStore((s) => s.smartSuggestions);
+  const fetchSmartSuggestions = useAnalyticsStore((s) => s.fetchSmartSuggestions);
   const exportCSV = useAnalyticsStore((s) => s.exportCSV);
   const setDateRange = useAnalyticsStore((s) => s.setDateRange);
 
   useEffect(() => {
     setDateRange(range);
     fetchMetrics();
-  }, [range, setDateRange, fetchMetrics]);
+    fetchSmartSuggestions();
+  }, [range, setDateRange, fetchMetrics, fetchSmartSuggestions]);
 
   return (
     <div className="p-4 md:p-6 space-y-6">
@@ -91,6 +94,33 @@ export default function AnalyticsPage() {
           </Tabs>
         </div>
       </div>
+
+      {smartSuggestions && (
+        <Card className="p-4 space-y-3">
+          <h2 className="text-sm font-semibold">Smart Suggestions</h2>
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Best times to post</p>
+            <div className="flex flex-wrap gap-2">
+              {smartSuggestions.bestTimes.map((time) => (
+                <span key={time} className="text-xs rounded-full border border-border px-2 py-1">
+                  {time}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">Top platforms</p>
+            <div className="flex flex-wrap gap-2">
+              {smartSuggestions.topPlatforms.map((platform) => (
+                <span key={platform} className="text-xs rounded-full border border-border px-2 py-1 capitalize">
+                  {platform}
+                </span>
+              ))}
+            </div>
+          </div>
+          <p className="text-sm">{smartSuggestions.weeklyInsight}</p>
+        </Card>
+      )}
 
       {loading ? (
         <Card className="p-8 text-center text-sm text-muted-foreground">Loading analytics...</Card>

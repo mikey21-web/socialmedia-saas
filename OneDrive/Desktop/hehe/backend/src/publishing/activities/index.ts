@@ -1,11 +1,14 @@
 import { PrismaService } from '../../prisma/prisma.service';
 import { PlatformsService } from '../../platforms/platforms.service';
 import { EmailService } from '../../email/email.service';
+import { CronExpressionParser } from 'cron-parser';
 import { PublishActivityResult, PlatformPublishJob } from '../types';
 import { buildPublishFacebookActivity } from './publish-facebook';
 import { buildPublishInstagramActivity } from './publish-instagram';
 import { buildPublishLinkedInActivity } from './publish-linkedin';
 import { buildPublishTwitterActivity } from './publish-twitter';
+import { buildPublishYouTubeActivity } from './publish-youtube';
+import { createTokenRefreshActivities } from './token-refresh.activities';
 
 export type FinalizePlatformResult = {
   postPlatformId: string;
@@ -87,6 +90,7 @@ export function createPublishingActivities(
     publishInstagram: buildPublishInstagramActivity(platformsService),
     publishLinkedIn: buildPublishLinkedInActivity(platformsService),
     publishFacebook: buildPublishFacebookActivity(platformsService),
+    publishYouTube: buildPublishYouTubeActivity(platformsService),
     finalizePublishPost: async (input: {
       postId: string;
       teamId: string;
@@ -143,6 +147,58 @@ export function createPublishingActivities(
         }
       }
     },
+    handleRecurringPost: async (input: { postId: string; teamId: string }) => {
+      const post = await prisma.post.findFirst({
+        where: {
+          id: input.postId,
+          teamId: input.teamId,
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          isRecurring: true,
+          recurrencePattern: true,
+          recurrenceEndAt: true,
+          nextPublishAt: true,
+          scheduledAt: true,
+        },
+      });
+
+      if (!post?.isRecurring || !post.recurrencePattern) {
+        return;
+      }
+
+      const currentDate = post.nextPublishAt ?? post.scheduledAt ?? new Date();
+
+      try {
+        const iterator = CronExpressionParser.parse(post.recurrencePattern, { currentDate });
+        const nextPublishAt = iterator.next().toDate();
+
+        if (post.recurrenceEndAt && nextPublishAt > post.recurrenceEndAt) {
+          await prisma.post.update({
+            where: { id: post.id },
+            data: { isRecurring: false, nextPublishAt: null },
+          });
+          return;
+        }
+
+        await prisma.post.update({
+          where: { id: post.id },
+          data: {
+            isRecurring: true,
+            nextPublishAt,
+            scheduledAt: nextPublishAt,
+            status: 'scheduled',
+          },
+        });
+      } catch {
+        await prisma.post.update({
+          where: { id: post.id },
+          data: { isRecurring: false, nextPublishAt: null },
+        });
+      }
+    },
+    ...createTokenRefreshActivities(prisma, platformsService),
     markPublishFailure: async (input: {
       postPlatformId: string;
       error: string;
@@ -158,3 +214,4 @@ export function createPublishingActivities(
     },
   };
 }
+

@@ -7,13 +7,6 @@ describe('MediaService', () => {
     service = new MediaService();
   });
 
-  describe('getFileUrl', () => {
-    it('returns a /uploads/ prefixed URL for a filename', () => {
-      const result = service.getFileUrl('abc123.jpg');
-      expect(result).toBe('/uploads/abc123.jpg');
-    });
-  });
-
   describe('validateMimeType', () => {
     it('accepts image/jpeg', () => {
       expect(() => service.validateMimeType('image/jpeg')).not.toThrow();
@@ -25,6 +18,20 @@ describe('MediaService', () => {
 
     it('rejects text/plain', () => {
       expect(() => service.validateMimeType('text/plain')).toThrow('Unsupported file type');
+    });
+  });
+
+  describe('uploadToS3', () => {
+    it('throws when S3 not configured', async () => {
+      const file = {
+        fieldname: 'file',
+        originalname: 'test.jpg',
+        encoding: '7bit',
+        mimetype: 'image/jpeg',
+        buffer: Buffer.from('data'),
+        size: 4,
+      };
+      await expect(service.uploadToS3(file)).rejects.toThrow('S3 not configured');
     });
   });
 });

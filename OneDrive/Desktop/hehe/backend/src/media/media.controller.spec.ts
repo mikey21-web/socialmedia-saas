@@ -1,15 +1,14 @@
 import { Test } from '@nestjs/testing';
 import { MediaController } from './media.controller';
-import { MediaService } from './media.service';
+import { MediaService, UploadedFile } from './media.service';
 import { BadRequestException } from '@nestjs/common';
 
 const mockService = {
   validateMimeType: jest.fn(),
-  getFileUrl: jest.fn().mockReturnValue('/uploads/test.jpg'),
+  uploadToS3: jest.fn().mockResolvedValue('https://s3.example.com/test.jpg'),
   generateImage: jest.fn().mockResolvedValue('https://replicate.delivery/test.jpg'),
+  generateVideo: jest.fn().mockResolvedValue('https://replicate.delivery/test.mp4'),
 };
-
-const mockUser = { userId: 'u1', email: 'a@b.com', team_id: 't1' };
 
 describe('MediaController', () => {
   let controller: MediaController;
@@ -25,26 +24,40 @@ describe('MediaController', () => {
 
   describe('upload', () => {
     it('returns url for valid file', async () => {
-      mockService.validateMimeType.mockReturnValueOnce(undefined);
-      const file = { originalname: 'img.jpg', mimetype: 'image/jpeg', filename: 'abc.jpg' } as Express.Multer.File;
-      const result = await controller.upload({ user: mockUser } as any, file);
-      expect(result).toEqual({ url: '/uploads/test.jpg' });
+      const file: UploadedFile = {
+        fieldname: 'file',
+        originalname: 'img.jpg',
+        encoding: '7bit',
+        mimetype: 'image/jpeg',
+        buffer: Buffer.from('data'),
+        size: 4,
+      };
+      const result = await controller.upload(file);
+      expect(mockService.validateMimeType).toHaveBeenCalledWith('image/jpeg');
+      expect(mockService.uploadToS3).toHaveBeenCalledWith(file);
+      expect(result).toEqual({ url: 'https://s3.example.com/test.jpg' });
     });
 
     it('throws when no file provided', async () => {
-      await expect(
-        controller.upload({ user: mockUser } as any, undefined as any),
-      ).rejects.toThrow(BadRequestException);
+      await expect(controller.upload(undefined as any)).rejects.toThrow(BadRequestException);
     });
   });
 
   describe('generateImage', () => {
     it('returns url from Replicate', async () => {
-      const result = await controller.generateImage(
-        { user: mockUser } as any,
-        { prompt: 'a red fox' },
-      );
+      const result = await controller.generateImage({ prompt: 'a red fox' });
       expect(result).toEqual({ url: 'https://replicate.delivery/test.jpg' });
+    });
+
+    it('throws when prompt missing', async () => {
+      await expect(controller.generateImage({ prompt: '' })).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('generateVideo', () => {
+    it('returns url from Replicate', async () => {
+      const result = await controller.generateVideo({ prompt: 'a sunset timelapse' });
+      expect(result).toEqual({ url: 'https://replicate.delivery/test.mp4' });
     });
   });
 });

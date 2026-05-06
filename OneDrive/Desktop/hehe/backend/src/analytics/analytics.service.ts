@@ -217,4 +217,82 @@ export class AnalyticsService {
       topPosts,
     };
   }
+
+  async getSmartSuggestions(teamId: string) {
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+
+    const posts = await this.prisma.post.findMany({
+      where: {
+        teamId,
+        deletedAt: null,
+        scheduledAt: { gte: since },
+      },
+      include: {
+        platforms: { select: { platform: true } },
+        analytics: { select: { count: true, eventType: true } },
+      },
+    });
+
+    const hourScores = new Map<number, number>();
+    const platformScores = new Map<string, number>();
+    const dayScores = new Map<number, { score: number; count: number }>();
+
+    for (const post of posts) {
+      const engagementScore = post.analytics.reduce((acc, event) => {
+        if (event.eventType.includes('engagement') || event.eventType.includes('like') || event.eventType.includes('comment')) {
+          return acc + event.count;
+        }
+        return acc;
+      }, 0);
+
+      if (post.scheduledAt) {
+        const hour = post.scheduledAt.getHours();
+        hourScores.set(hour, (hourScores.get(hour) ?? 0) + Math.max(engagementScore, 1));
+
+        const dow = post.scheduledAt.getDay();
+        const current = dayScores.get(dow) ?? { score: 0, count: 0 };
+        dayScores.set(dow, { score: current.score + engagementScore, count: current.count + 1 });
+      }
+
+      for (const platform of post.platforms) {
+        platformScores.set(platform.platform, (platformScores.get(platform.platform) ?? 0) + Math.max(engagementScore, 1));
+      }
+    }
+
+    const bestTimes = Array.from(hourScores.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([hour]) => `${String(hour).padStart(2, '0')}:00`);
+
+    const topPlatforms = Array.from(platformScores.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([platform]) => platform);
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const bestDayEntry = Array.from(dayScores.entries())
+      .map(([day, stats]) => ({ day, avg: stats.count ? stats.score / stats.count : 0 }))
+      .sort((a, b) => b.avg - a.avg)[0];
+
+    const weeklyInsight = bestDayEntry
+      ? `Your strongest day is ${dayNames[bestDayEntry.day]} based on average engagement over the last 30 days.`
+      : 'Not enough data yet. Publish consistently this week to unlock stronger insights.';
+
+    const contentTips: string[] = [];
+    if (bestTimes.length) {
+      contentTips.push(`Schedule around ${bestTimes[0]} to match your top-performing time window.`);
+    }
+    if (topPlatforms.length) {
+      contentTips.push(`Prioritize ${topPlatforms[0]} for high-impact posts this week.`);
+    }
+    contentTips.push('Use concise hooks in the first line and include one clear call-to-action.');
+
+    return {
+      bestTimes: bestTimes.length ? bestTimes : ['09:00', '13:00', '18:00'],
+      topPlatforms: topPlatforms.length ? topPlatforms : ['linkedin', 'twitter'],
+      contentTips,
+      weeklyInsight,
+    };
+  }
 }

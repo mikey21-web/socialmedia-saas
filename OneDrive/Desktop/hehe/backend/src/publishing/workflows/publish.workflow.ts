@@ -20,6 +20,7 @@ type PublishActivities = {
   publishInstagram: (input: PublishActivityInput) => Promise<PublishActivityResult>;
   publishLinkedIn: (input: PublishActivityInput) => Promise<PublishActivityResult>;
   publishFacebook: (input: PublishActivityInput) => Promise<PublishActivityResult>;
+  publishYouTube: (input: PublishActivityInput) => Promise<PublishActivityResult>;
   finalizePublishPost: (input: {
     postId: string;
     teamId: string;
@@ -31,6 +32,7 @@ type PublishActivities = {
       error?: string;
     }>;
   }) => Promise<void>;
+  handleRecurringPost: (input: { postId: string; teamId: string }) => Promise<void>;
 };
 
 const activities = proxyActivities<PublishActivities>({
@@ -73,6 +75,10 @@ export async function publishPostWorkflow(input: PublishWorkflowInput) {
           const result = await activities.publishFacebook(payload);
           return { ...result, platform: 'facebook', postPlatformId: job.postPlatformId };
         }
+        if (job.platform === 'youtube') {
+          const result = await activities.publishYouTube(payload);
+          return { ...result, platform: 'youtube', postPlatformId: job.postPlatformId };
+        }
         return {
           success: false,
           error: `Unsupported platform ${job.platform}`,
@@ -95,6 +101,11 @@ export async function publishPostWorkflow(input: PublishWorkflowInput) {
     postId: context.postId,
     teamId: input.teamId,
     results,
+  });
+
+  await activities.handleRecurringPost({
+    postId: context.postId,
+    teamId: input.teamId,
   });
 
   const publishedPlatforms = results

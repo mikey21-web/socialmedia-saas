@@ -42,6 +42,14 @@ export class PostsController {
     return this.postsService.listPosts(req.user, query);
   }
 
+  @Get(':id')
+  getPostById(
+    @Req() req: { user: AuthenticatedRequestUser },
+    @Param('id') postId: string,
+  ) {
+    return this.postsService.getPostById(req.user, postId);
+  }
+
   @Patch(':id')
   updatePost(
     @Req() req: { user: AuthenticatedRequestUser },

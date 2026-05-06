@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, CreditCard, Users } from "lucide-react";
+import { ArrowRight, CreditCard, PenLine, PlaySquare, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 
 const sections = [
@@ -8,12 +8,28 @@ const sections = [
     title: "Billing",
     description: "View plans, pricing and subscription status.",
     icon: CreditCard,
+    iconClassName: "text-muted-foreground",
   },
   {
     href: "/settings/team",
     title: "Team",
     description: "Manage team members and invitations.",
     icon: Users,
+    iconClassName: "text-muted-foreground",
+  },
+  {
+    href: "/settings/signature",
+    title: "Signature",
+    description: "Set an auto-appended team signature for posts.",
+    icon: PenLine,
+    iconClassName: "text-muted-foreground",
+  },
+  {
+    href: "/settings#youtube",
+    title: "YouTube",
+    description: "Connect your YouTube channel for publishing and analytics.",
+    icon: PlaySquare,
+    iconClassName: "text-red-400",
   },
 ];
 
@@ -28,13 +44,16 @@ export default function SettingsIndexPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        {sections.map(({ href, title, description, icon: Icon }) => (
+        {sections.map(({ href, title, description, icon: Icon, iconClassName }) => (
           <Link key={href} href={href}>
-            <Card className="p-5 h-full hover:border-ring transition-colors">
+            <Card
+              id={title === "YouTube" ? "youtube" : undefined}
+              className="p-5 h-full hover:border-ring transition-colors"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <Icon className="size-4 text-muted-foreground" />
+                    <Icon className={`size-4 ${iconClassName}`} />
                     <p className="text-sm font-semibold">{title}</p>
                   </div>
                   <p className="text-sm text-muted-foreground">{description}</p>

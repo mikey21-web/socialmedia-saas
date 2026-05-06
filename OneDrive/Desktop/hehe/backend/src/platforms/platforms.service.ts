@@ -2,12 +2,16 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { WorkflowExecutionAlreadyStartedError } from '@temporalio/client';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
+import { tokenRefreshWorkflow } from '../publishing/workflows/token-refresh.workflow';
 import { PrismaService } from '../prisma/prisma.service';
+import { TemporalClientService } from '../temporal/client';
 
-const SUPPORTED_PLATFORMS = ['x', 'twitter', 'instagram', 'linkedin', 'facebook'] as const;
+const SUPPORTED_PLATFORMS = ['x', 'twitter', 'instagram', 'linkedin', 'facebook', 'youtube'] as const;
 type SupportedPlatform = (typeof SUPPORTED_PLATFORMS)[number];
 
 export type PlatformTokenPayload = {
@@ -18,7 +22,12 @@ export type PlatformTokenPayload = {
 
 @Injectable()
 export class PlatformsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(PlatformsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly temporalClientService: TemporalClientService,
+  ) {}
 
   listSupportedPlatforms() {
     return SUPPORTED_PLATFORMS;
@@ -28,6 +37,8 @@ export class PlatformsService {
     userId: string,
     platform: string,
     tokens: PlatformTokenPayload,
+    accountId: string,
+    accountName?: string,
   ) {
     const normalizedPlatform = this.normalizePlatform(platform);
     const teamId = await this.resolveTeamId(userId);
@@ -38,53 +49,125 @@ export class PlatformsService {
       ? this.encryptValue(tokens.refreshToken, key)
       : null;
 
-    await this.prisma.platformCredential.upsert({
+    const credential = await this.prisma.platformCredential.upsert({
       where: {
-        teamId_platform: {
+        teamId_platform_accountId: {
           teamId,
           platform: normalizedPlatform,
+          accountId,
         },
       },
       create: {
         teamId,
         platform: normalizedPlatform,
+        accountId,
+        accountName: accountName ?? null,
         accessToken: encryptedAccessToken,
         refreshToken: encryptedRefreshToken,
         expiresAt: tokens.expiresAt ?? null,
       },
       update: {
+        accountName: accountName ?? null,
         accessToken: encryptedAccessToken,
         refreshToken: encryptedRefreshToken,
         expiresAt: tokens.expiresAt ?? null,
       },
     });
+
+    if (tokens.expiresAt) {
+      await this.scheduleTokenRefreshWorkflow(userId, normalizedPlatform, teamId, credential.id);
+    }
+
+    return credential;
   }
 
-  async getCredential(userId: string, platform: string) {
+  async scheduleTokenRefreshWorkflow(
+    userId: string,
+    platform: string,
+    teamId: string,
+    credentialId?: string,
+  ) {
+    if (!credentialId) {
+      throw new BadRequestException('Credential id is required for token refresh scheduling');
+    }
+
+    const client = await this.temporalClientService.getClient();
+
+    try {
+      await client.workflow.start(tokenRefreshWorkflow, {
+        taskQueue: 'posts-queue',
+        workflowId: `token-refresh-${teamId}-${platform}`,
+        workflowExecutionTimeout: '30 days',
+        args: [{ teamId, platform, userId, credentialId }],
+      });
+    } catch (error) {
+      if (error instanceof WorkflowExecutionAlreadyStartedError) {
+        this.logger.log(`Token refresh workflow already running for ${teamId}/${platform}`);
+        return;
+      }
+      throw error;
+    }
+  }
+
+  async getCredential(userId: string, platform: string, accountId?: string) {
     const normalizedPlatform = this.normalizePlatform(platform);
     const teamId = await this.resolveTeamId(userId);
     const key = this.deriveKey(userId);
 
-    const credential = await this.prisma.platformCredential.findUnique({
-      where: {
-        teamId_platform: {
+    const credential = accountId
+      ? await this.prisma.platformCredential.findUnique({
+        where: {
+          teamId_platform_accountId: {
+            teamId,
+            platform: normalizedPlatform,
+            accountId,
+          },
+        },
+      })
+      : await this.prisma.platformCredential.findFirst({
+        where: {
           teamId,
           platform: normalizedPlatform,
         },
-      },
-    });
+        orderBy: { createdAt: 'asc' },
+      });
 
     if (!credential) {
       throw new NotFoundException('Platform credential not found');
     }
 
     return {
+      id: credential.id,
+      accountId: credential.accountId,
+      accountName: credential.accountName,
       accessToken: this.decryptValue(credential.accessToken, key),
       refreshToken: credential.refreshToken
         ? this.decryptValue(credential.refreshToken, key)
         : null,
       expiresAt: credential.expiresAt,
     };
+  }
+
+  async getCredentialsByPlatform(userId: string, platform: string) {
+    const normalizedPlatform = this.normalizePlatform(platform);
+    const teamId = await this.resolveTeamId(userId);
+    const key = this.deriveKey(userId);
+
+    const credentials = await this.prisma.platformCredential.findMany({
+      where: { teamId, platform: normalizedPlatform },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return credentials.map((credential) => ({
+      id: credential.id,
+      accountId: credential.accountId,
+      accountName: credential.accountName,
+      accessToken: this.decryptValue(credential.accessToken, key),
+      refreshToken: credential.refreshToken
+        ? this.decryptValue(credential.refreshToken, key)
+        : null,
+      expiresAt: credential.expiresAt,
+    }));
   }
 
   async getCredentialById(userId: string, credentialId: string) {
@@ -107,7 +190,10 @@ export class PlatformsService {
     }
 
     return {
+      id: credential.id,
       platform: credential.platform,
+      accountId: credential.accountId,
+      accountName: credential.accountName,
       accessToken: this.decryptValue(credential.accessToken, key),
       refreshToken: credential.refreshToken
         ? this.decryptValue(credential.refreshToken, key)
@@ -116,24 +202,32 @@ export class PlatformsService {
     };
   }
 
-  async refreshToken(userId: string, platform: string) {
-    const normalizedPlatform = this.normalizePlatform(platform);
-    const currentCredential = await this.getCredential(userId, normalizedPlatform);
+  async refreshToken(userId: string, credentialId: string) {
+    const credential = await this.getCredentialById(userId, credentialId);
+    const normalizedPlatform = this.normalizePlatform(credential.platform);
 
-    if (!currentCredential.refreshToken) {
-      throw new BadRequestException('Refresh token is not available for this platform');
+    if (!credential.refreshToken) {
+      throw new BadRequestException('NoRefreshToken');
     }
 
     const refreshedTokens = await this.callRefreshTokenEndpoint(
       normalizedPlatform,
-      currentCredential.refreshToken,
+      credential.refreshToken,
     );
 
-    await this.storeCredential(userId, normalizedPlatform, {
-      accessToken: refreshedTokens.accessToken,
-      refreshToken: refreshedTokens.refreshToken ?? currentCredential.refreshToken,
-      expiresAt: refreshedTokens.expiresAt,
-    });
+    await this.storeCredential(
+      userId,
+      normalizedPlatform,
+      {
+        accessToken: refreshedTokens.accessToken,
+        refreshToken: refreshedTokens.refreshToken ?? credential.refreshToken,
+        expiresAt: refreshedTokens.expiresAt,
+      },
+      credential.accountId ?? normalizedPlatform,
+      credential.accountName ?? undefined,
+    );
+
+    this.logger.log(`Refreshed token for ${normalizedPlatform} credential ${credentialId}`);
 
     return {
       platform: normalizedPlatform,
@@ -150,12 +244,13 @@ export class PlatformsService {
       instagram: 'https://graph.instagram.com/refresh_access_token',
       linkedin: 'https://www.linkedin.com/oauth/v2/accessToken',
       facebook: 'https://graph.facebook.com/v19.0/oauth/access_token',
+      youtube: 'https://oauth2.googleapis.com/token',
     };
 
     const tokenEndpoint = tokenEndpointByPlatform[platform];
 
     if (!tokenEndpoint) {
-      throw new BadRequestException(`Unsupported platform: ${platform}`);
+      throw new BadRequestException('PlatformNotSupported');
     }
 
     if (platform === 'instagram') {
@@ -286,6 +381,7 @@ export class PlatformsService {
       instagram: 'INSTAGRAM',
       linkedin: 'LINKEDIN',
       facebook: 'FACEBOOK',
+      youtube: 'YOUTUBE',
     };
 
     const prefix = envPrefixByPlatform[platform];

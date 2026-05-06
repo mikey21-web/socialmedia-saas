@@ -3,14 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { BarChart2, Calendar, LayoutDashboard, Menu, Settings, X, FileText } from "lucide-react";
+import { BarChart2, Calendar, LayoutDashboard, Menu, Settings, X, FileText, FolderKanban } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/dashboard",  label: "Dashboard", icon: LayoutDashboard },
   { href: "/posts",      label: "Posts",     icon: FileText },
   { href: "/calendar",   label: "Calendar",  icon: Calendar },
+  { href: "/sets",       label: "Sets",      icon: FolderKanban },
   { href: "/analytics",  label: "Analytics", icon: BarChart2 },
   { href: "/settings",   label: "Settings",  icon: Settings },
 ];
@@ -53,11 +55,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </aside>
 
       <div className="flex-1 overflow-hidden flex flex-col">
-        <header className="md:hidden h-14 border-b border-border bg-background flex items-center justify-between px-3">
-          <div className="font-semibold text-sm">Postiz</div>
-          <Button variant="outline" size="icon" onClick={() => setOpen((v) => !v)} className="h-11 w-11">
-            {open ? <X className="size-4" /> : <Menu className="size-4" />}
-          </Button>
+        <header className="h-14 border-b border-border bg-background flex items-center justify-between px-3 md:px-5">
+          <div className="font-semibold text-sm md:hidden">Postiz</div>
+          <div className="hidden md:block text-sm text-muted-foreground">Workspace</div>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button variant="outline" size="icon" onClick={() => setOpen((v) => !v)} className="h-11 w-11 md:hidden">
+              {open ? <X className="size-4" /> : <Menu className="size-4" />}
+            </Button>
+          </div>
         </header>
 
         {open && (

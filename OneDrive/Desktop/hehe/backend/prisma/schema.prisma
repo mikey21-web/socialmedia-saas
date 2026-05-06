@@ -25,14 +25,17 @@ model Team {
   id        String   @id @default(cuid())
   name      String
   ownerId   String
+  signature String?  @db.Text
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   deletedAt DateTime?
 
-  members      TeamMember[]
-  posts        Post[]
-  credentials  PlatformCredential[]
-  subscription Subscription?
+  members           TeamMember[]
+  posts             Post[]
+  credentials       PlatformCredential[]
+  subscription      Subscription?
+  postSets          PostSet[]
+  thirdParties      ThirdPartyIntegration[]
 
   @@index([ownerId])
 }
@@ -51,23 +54,32 @@ model TeamMember {
 }
 
 model Post {
-  id          String   @id @default(cuid())
-  teamId      String
-  title       String
-  content     String
-  mediaUrls   Json     @default("[]")
-  status      String   @default("draft")
-  scheduledAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  deletedAt   DateTime?
+  id                String    @id @default(cuid())
+  teamId            String
+  title             String
+  content           String
+  mediaUrls         Json      @default("[]")
+  status            String    @default("draft")
+  scheduledAt       DateTime?
+  postDelay         Int?
+  isRecurring       Boolean   @default(false)
+  recurrencePattern String?
+  recurrenceEndAt   DateTime?
+  nextPublishAt     DateTime?
+  postSetId         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
 
   team      Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
   platforms PostPlatform[]
   analytics AnalyticsEvent[]
+  postSet   PostSet?         @relation(fields: [postSetId], references: [id])
+  comments  Comment[]
 
   @@index([teamId])
   @@index([status])
+  @@index([postSetId])
 }
 
 model PostPlatform {
@@ -86,6 +98,8 @@ model PlatformCredential {
   id           String   @id @default(cuid())
   teamId       String
   platform     String
+  accountId    String?
+  accountName  String?
   accessToken  String   @db.Text
   refreshToken String?  @db.Text
   expiresAt    DateTime?
@@ -94,13 +108,16 @@ model PlatformCredential {
 
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
-  @@unique([teamId, platform])
+  @@unique([teamId, platform, accountId])
+  @@index([teamId])
+  @@index([teamId, platform])
 }
 
 model Subscription {
   id               String   @id @default(cuid())
   teamId           String   @unique
   plan             String   @default("free")
+  seats            Int      @default(1)
   stripeCustomerId String?
   stripePriceId    String?
   stripeId         String?
@@ -128,4 +145,54 @@ model AnalyticsEvent {
 
   @@index([postId])
   @@index([eventType])
+}
+
+model PostSet {
+  id          String    @id @default(cuid())
+  teamId      String
+  name        String
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  team  Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  posts Post[]
+
+  @@index([teamId])
+}
+
+model Comment {
+  id         String    @id @default(cuid())
+  postId     String
+  teamId     String
+  authorId   String
+  content    String    @db.Text
+  platform   String?
+  externalId String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([teamId])
+}
+
+model ThirdPartyIntegration {
+  id         String   @id @default(cuid())
+  teamId     String
+  identifier String
+  apiKey     String   @db.Text
+  name       String?
+  username   String?
+  externalId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, identifier])
+  @@index([teamId])
 }

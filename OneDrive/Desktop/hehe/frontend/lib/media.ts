@@ -17,3 +17,8 @@ export async function generateImage(prompt: string): Promise<string> {
   const response = await api.post<{ url: string }>('/media/generate', { prompt });
   return response.data.url;
 }
+
+export async function generateVideo(prompt: string): Promise<string> {
+  const response = await api.post<{ url: string }>('/media/generate-video', { prompt });
+  return response.data.url;
+}

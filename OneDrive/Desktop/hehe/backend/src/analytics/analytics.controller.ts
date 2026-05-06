@@ -34,4 +34,10 @@ export class AnalyticsController {
   getTeamStats(@Req() req: { user: AuthenticatedRequestUser }) {
     return this.analyticsService.getTeamStats(req.user.team_id);
   }
+
+  @Get('smart-suggestions')
+  @SubscriptionFeatureLimit('analytics')
+  getSmartSuggestions(@Req() req: { user: AuthenticatedRequestUser }) {
+    return this.analyticsService.getSmartSuggestions(req.user.team_id);
+  }
 }

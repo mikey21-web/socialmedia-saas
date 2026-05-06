@@ -43,8 +43,15 @@ interface AnalyticsState {
   loading: boolean;
   error: string | null;
   dateRange: "7d" | "30d" | "90d";
+  smartSuggestions: {
+    bestTimes: string[];
+    topPlatforms: string[];
+    contentTips: string[];
+    weeklyInsight: string;
+  } | null;
   setDateRange: (range: "7d" | "30d" | "90d") => void;
   fetchMetrics: () => Promise<void>;
+  fetchSmartSuggestions: () => Promise<void>;
   exportCSV: () => void;
 }
 
@@ -55,6 +62,7 @@ export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
   loading: false,
   error: null,
   dateRange: "30d",
+  smartSuggestions: null,
 
   setDateRange: (range) => set({ dateRange: range }),
 
@@ -96,6 +104,20 @@ export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to fetch analytics";
       set({ error: message, loading: false });
+    }
+  },
+
+  fetchSmartSuggestions: async () => {
+    try {
+      const response = await api.get<{
+        bestTimes: string[];
+        topPlatforms: string[];
+        contentTips: string[];
+        weeklyInsight: string;
+      }>("/analytics/smart-suggestions");
+      set({ smartSuggestions: response.data });
+    } catch {
+      set({ smartSuggestions: null });
     }
   },
 

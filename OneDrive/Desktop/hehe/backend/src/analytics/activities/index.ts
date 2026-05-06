@@ -4,6 +4,7 @@ import { buildCollectAnalyticsFacebookActivity } from './collect-analytics-faceb
 import { buildCollectAnalyticsInstagramActivity } from './collect-analytics-instagram';
 import { buildCollectAnalyticsLinkedInActivity } from './collect-analytics-linkedin';
 import { buildCollectAnalyticsTwitterActivity } from './collect-analytics-twitter';
+import { buildCollectAnalyticsYouTubeActivity } from './collect-analytics-youtube';
 import { AnalyticsMetricRecord } from '../types';
 
 export function createAnalyticsActivities(
@@ -58,6 +59,7 @@ export function createAnalyticsActivities(
     collectAnalyticsInstagram: buildCollectAnalyticsInstagramActivity(platformsService),
     collectAnalyticsLinkedIn: buildCollectAnalyticsLinkedInActivity(platformsService),
     collectAnalyticsFacebook: buildCollectAnalyticsFacebookActivity(platformsService),
+    collectAnalyticsYouTube: buildCollectAnalyticsYouTubeActivity(platformsService),
     persistAnalyticsMetrics: async (input: {
       postId: string;
       metrics: AnalyticsMetricRecord[];

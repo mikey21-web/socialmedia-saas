@@ -5,12 +5,14 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { CronExpressionParser } from 'cron-parser';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuthenticatedRequestUser } from '../common/interfaces/authenticated-request-user.interface';
 import { CreatePostDto } from './dto/create-post.dto';
 import { ListPostsDto } from './dto/list-posts.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PublishingService } from '../publishing/publishing.service';
+import { TeamsService } from '../teams/teams.service';
 
 const VALID_PLATFORMS = ['twitter', 'instagram', 'linkedin', 'facebook'] as const;
 type SupportedPlatform = (typeof VALID_PLATFORMS)[number];
@@ -19,6 +21,7 @@ type SupportedPlatform = (typeof VALID_PLATFORMS)[number];
 export class PostsService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly teamsService: TeamsService,
     @Optional() private readonly publishingService?: PublishingService,
   ) {}
 
@@ -27,17 +30,58 @@ export class PostsService {
     this.validateContentLengthByPlatform(dto.content, dto.platforms);
 
     const teamId = await this.resolveTeamId(user.userId, user.team_id);
-    const scheduledAt = dto.scheduledAt ? this.parseScheduledAt(dto.scheduledAt) : null;
+    const teamSignature = await this.teamsService.getTeamSignature(teamId);
+    const normalizedSignature = teamSignature?.trim();
+    const content = normalizedSignature
+      ? `${dto.content}\n\n${normalizedSignature}`
+      : dto.content;
+    const requestedScheduledAt = dto.scheduledAt
+      ? this.parseScheduledAt(dto.scheduledAt)
+      : null;
+    const postDelay = dto.postDelay ?? null;
+    const scheduledAt =
+      requestedScheduledAt && postDelay && postDelay > 0
+        ? new Date(requestedScheduledAt.getTime() + postDelay * 60 * 1000)
+        : requestedScheduledAt;
+    const recurrenceEndAt = dto.recurrenceEndAt
+      ? this.parseScheduledAt(dto.recurrenceEndAt)
+      : null;
+    const isRecurring = dto.isRecurring ?? false;
+    const recurrencePattern = dto.recurrencePattern?.trim() || null;
+    if (isRecurring && !recurrencePattern) {
+      throw new BadRequestException('recurrencePattern is required when isRecurring is true');
+    }
+    if (dto.postSetId) {
+      const postSet = await this.prisma.postSet.findFirst({
+        where: { id: dto.postSetId, teamId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!postSet) {
+        throw new BadRequestException('Invalid postSetId for this team');
+      }
+    }
+    const nextPublishAt = this.computeNextPublishAt(
+      isRecurring,
+      recurrencePattern,
+      scheduledAt ?? new Date(),
+      recurrenceEndAt,
+    );
     const status = scheduledAt ? 'scheduled' : 'draft';
-    const title = dto.content.trim().slice(0, 80) || 'Untitled';
+    const title = content.trim().slice(0, 80) || 'Untitled';
 
     const createdPost = await this.prisma.$transaction(async (tx) => {
       const post = await tx.post.create({
         data: {
           teamId,
           title,
-          content: dto.content,
+          content,
           mediaUrls: dto.mediaUrls ?? [],
+          postDelay,
+          isRecurring,
+          recurrencePattern,
+          recurrenceEndAt,
+          nextPublishAt,
+          postSetId: dto.postSetId,
           status,
           scheduledAt,
         },
@@ -245,5 +289,51 @@ export class PostsService {
     }
 
     return parsedDate;
+  }
+
+  async getPostById(user: AuthenticatedRequestUser, postId: string) {
+    const teamId = await this.resolveTeamId(user.userId, user.team_id);
+    const post = await this.prisma.post.findFirst({
+      where: {
+        id: postId,
+        teamId,
+        deletedAt: null,
+      },
+      include: {
+        platforms: {
+          select: { platform: true, status: true },
+        },
+      },
+    });
+
+    if (!post) {
+      throw new NotFoundException('Post not found');
+    }
+
+    return post;
+  }
+
+  private computeNextPublishAt(
+    isRecurring: boolean,
+    recurrencePattern: string | null,
+    currentTime: Date,
+    recurrenceEndAt: Date | null,
+  ) {
+    if (!isRecurring || !recurrencePattern) {
+      return null;
+    }
+
+    try {
+      const iterator = CronExpressionParser.parse(recurrencePattern, {
+        currentDate: currentTime,
+      });
+      const next = iterator.next().toDate();
+      if (recurrenceEndAt && next > recurrenceEndAt) {
+        return null;
+      }
+      return next;
+    } catch {
+      throw new BadRequestException('Invalid recurrencePattern cron expression');
+    }
   }
 }

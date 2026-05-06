@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { api } from "@/lib/api";
 
-export type Platform = "twitter" | "instagram" | "linkedin" | "facebook";
+export type Platform = "twitter" | "instagram" | "linkedin" | "facebook" | "youtube";
 
 export interface Post {
   id: string;
@@ -20,7 +20,17 @@ interface PostsState {
   loading: boolean;
   error: string | null;
   fetchPosts: () => Promise<void>;
-  createPost: (content: string, platforms: Platform[], scheduledAt?: string, mediaUrls?: string[]) => Promise<void>;
+  createPost: (
+    content: string,
+    platforms: Platform[],
+    scheduledAt?: string,
+    mediaUrls?: string[],
+    postDelay?: number,
+    isRecurring?: boolean,
+    recurrencePattern?: string,
+    recurrenceEndAt?: string,
+    postSetId?: string,
+  ) => Promise<void>;
 }
 
 export const usePostsStore = create<PostsState>((set) => ({
@@ -64,13 +74,28 @@ export const usePostsStore = create<PostsState>((set) => ({
     }
   },
 
-  createPost: async (content: string, platforms: Platform[], scheduledAt?: string, mediaUrls?: string[]) => {
+  createPost: async (
+    content: string,
+    platforms: Platform[],
+    scheduledAt?: string,
+    mediaUrls?: string[],
+    postDelay?: number,
+    isRecurring?: boolean,
+    recurrencePattern?: string,
+    recurrenceEndAt?: string,
+    postSetId?: string,
+  ) => {
     set({ loading: true, error: null });
     try {
       await api.post("/posts", {
         content,
         platforms,
         scheduledAt: scheduledAt || undefined,
+        postDelay: postDelay ?? undefined,
+        isRecurring: isRecurring ?? undefined,
+        recurrencePattern: recurrencePattern || undefined,
+        recurrenceEndAt: recurrenceEndAt || undefined,
+        postSetId: postSetId || undefined,
         ...(mediaUrls && mediaUrls.length > 0 ? { mediaUrls } : {}),
       });
       // Refetch posts to update list with newly created post

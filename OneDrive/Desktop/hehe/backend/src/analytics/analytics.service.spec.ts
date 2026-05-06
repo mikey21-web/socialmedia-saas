@@ -64,4 +64,28 @@ describe('AnalyticsService', () => {
       engagements: 10,
     }));
   });
+
+  it('returns smart suggestions using last 30 days post patterns', async () => {
+    mockPrisma.post.findMany.mockResolvedValue([
+      {
+        id: 'post-a',
+        scheduledAt: new Date('2026-01-03T09:00:00.000Z'),
+        platforms: [{ platform: 'linkedin' }],
+        analytics: [{ eventType: 'linkedin:engagements', count: 20 }],
+      },
+      {
+        id: 'post-b',
+        scheduledAt: new Date('2026-01-03T13:00:00.000Z'),
+        platforms: [{ platform: 'twitter' }],
+        analytics: [{ eventType: 'twitter:likes', count: 12 }],
+      },
+    ]);
+
+    const result = await service.getSmartSuggestions('team-1');
+
+    expect(result.bestTimes.length).toBeGreaterThan(0);
+    expect(result.topPlatforms).toEqual(expect.arrayContaining(['linkedin', 'twitter']));
+    expect(result.contentTips.length).toBeGreaterThan(0);
+    expect(typeof result.weeklyInsight).toBe('string');
+  });
 });

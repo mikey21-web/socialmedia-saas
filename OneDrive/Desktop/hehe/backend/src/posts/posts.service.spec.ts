@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { PostsService } from './posts.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { PublishingService } from '../publishing/publishing.service';
+import { TeamsService } from '../teams/teams.service';
 
 const user = {
   userId: 'user-1',
@@ -29,10 +30,13 @@ const mockPrisma = {
 
 describe('PostsService', () => {
   let service: PostsService;
+  const mockTeamsService = {
+    getTeamSignature: jest.fn().mockResolvedValue(null),
+  } as unknown as TeamsService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new PostsService(mockPrisma as unknown as PrismaService);
+    service = new PostsService(mockPrisma as unknown as PrismaService, mockTeamsService);
   });
 
   describe('createPost', () => {
@@ -130,6 +134,7 @@ describe('PostsService', () => {
       const publishPost = jest.fn().mockResolvedValue({ workflowId: 'wf-1' });
       const dueService = new PostsService(
         mockPrisma as unknown as PrismaService,
+        mockTeamsService,
         { publishPost } as unknown as PublishingService,
       );
       mockPrisma.teamMember.findFirst.mockResolvedValue({ teamId: 'team-1' });

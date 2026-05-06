@@ -33,6 +33,11 @@ type AnalyticsActivities = {
     postId: string;
     userId: string;
   }) => Promise<AnalyticsMetricRecord>;
+  collectAnalyticsYouTube: (input: {
+    externalId: string;
+    postId: string;
+    userId: string;
+  }) => Promise<AnalyticsMetricRecord>;
   persistAnalyticsMetrics: (input: {
     postId: string;
     metrics: AnalyticsMetricRecord[];
@@ -75,6 +80,13 @@ export async function collectAnalyticsWorkflow(input: CollectAnalyticsWorkflowIn
       }
       if (entry.platform === 'facebook') {
         return activities.collectAnalyticsFacebook({
+          externalId: entry.externalId,
+          postId: context.postId,
+          userId: context.userId,
+        });
+      }
+      if (entry.platform === 'youtube') {
+        return activities.collectAnalyticsYouTube({
           externalId: entry.externalId,
           postId: context.postId,
           userId: context.userId,

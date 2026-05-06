@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { FileText, RotateCw } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -89,8 +90,9 @@ export default function PostsPage() {
       ) : (
         <div className="space-y-2">
           {filtered.map((post) => (
-            <div
+            <Link
               key={post.id}
+              href={`/posts/${post.id}`}
               className="flex items-center gap-3 rounded-lg border border-border bg-card p-3.5 hover:border-ring transition-colors cursor-pointer"
             >
               <PlatformBadge platform={post.platform} showLabel={false} className="shrink-0" />
@@ -109,7 +111,7 @@ export default function PostsPage() {
               >
                 {post.status.charAt(0).toUpperCase() + post.status.slice(1)}
               </span>
-            </div>
+            </Link>
           ))}
         </div>
       )}
