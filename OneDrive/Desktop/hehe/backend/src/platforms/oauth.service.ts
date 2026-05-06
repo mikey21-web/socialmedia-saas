@@ -1,5 +1,7 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import { BadRequestException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { createHash, randomBytes, randomUUID } from 'crypto';
+import type { Redis } from 'ioredis';
+import { REDIS_CLIENT } from '../common/redis.provider';
 import { PlatformsService } from './platforms.service';
 
 type OAuthPlatform = 'x' | 'instagram' | 'linkedin' | 'facebook' | 'youtube' | 'tiktok';
@@ -25,11 +27,14 @@ const GRAPH = 'https://graph.facebook.com/v20.0';
 @Injectable()
 export class OauthService {
   private readonly logger = new Logger(OauthService.name);
-  private readonly oauthStates = new Map<string, OAuthStateEntry>();
+  private readonly fallbackStates = new Map<string, OAuthStateEntry>();
 
-  constructor(private readonly platformsService: PlatformsService) {}
+  constructor(
+    private readonly platformsService: PlatformsService,
+    @Optional() @Inject(REDIS_CLIENT) private readonly redis: Redis | null,
+  ) {}
 
-  getAuthorizeUrl(platform: string, userId: string) {
+  async getAuthorizeUrl(platform: string, userId: string) {
     const normalizedPlatform = this.normalizePlatform(platform);
     const state = randomUUID();
     const oauthState: OAuthStateEntry = {
@@ -42,7 +47,8 @@ export class OauthService {
     let authorizeUrl: URL;
 
     if (normalizedPlatform === 'x') {
-      const codeVerifier = randomUUID().replace(/-/g, '');
+      const codeVerifier = randomBytes(32).toString('base64url');
+      const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
       oauthState.codeVerifier = codeVerifier;
       const clientId = this.readOAuthEnv('x', 'CLIENT_ID');
 
@@ -55,8 +61,8 @@ export class OauthService {
         process.env.X_OAUTH_SCOPE ?? 'tweet.read tweet.write users.read offline.access',
       );
       authorizeUrl.searchParams.set('state', state);
-      authorizeUrl.searchParams.set('code_challenge', codeVerifier);
-      authorizeUrl.searchParams.set('code_challenge_method', 'plain');
+      authorizeUrl.searchParams.set('code_challenge', codeChallenge);
+      authorizeUrl.searchParams.set('code_challenge_method', 'S256');
     } else if (normalizedPlatform === 'linkedin') {
       const clientId = this.readOAuthEnv('linkedin', 'CLIENT_ID');
 
@@ -114,8 +120,7 @@ export class OauthService {
       authorizeUrl.searchParams.set('state', state);
     }
 
-    this.oauthStates.set(state, oauthState);
-    this.cleanupExpiredStates();
+    await this.storeOAuthState(state, oauthState);
 
     return authorizeUrl.toString();
   }
@@ -134,13 +139,13 @@ export class OauthService {
       throw new BadRequestException('OAuth callback is missing required query params');
     }
 
-    const oauthState = this.oauthStates.get(params.state);
+    const oauthState = await this.getOAuthState(params.state);
 
     if (!oauthState) {
       throw new BadRequestException('OAuth state is invalid or has expired');
     }
 
-    this.oauthStates.delete(params.state);
+    await this.deleteOAuthState(params.state);
 
     const { platform, userId } = oauthState;
 
@@ -342,11 +347,12 @@ export class OauthService {
   private async fetchAllFacebookPages(userToken: string): Promise<FacebookPage[]> {
     const seenIds = new Set<string>();
     const pages: FacebookPage[] = [];
+    const authHeader = { Authorization: `Bearer ${userToken}` };
 
     const fetchPaginated = async (startUrl: string) => {
       let url: string | undefined = startUrl;
       while (url) {
-        const res = await fetch(url);
+        const res = await fetch(url, { headers: authHeader });
         const json = (await res.json()) as {
           data?: FacebookPage[];
           paging?: { next?: string };
@@ -362,16 +368,15 @@ export class OauthService {
     };
 
     await fetchPaginated(
-      `${GRAPH}/me/accounts?fields=id,name,access_token,instagram_business_account,picture.type(large)&limit=100&access_token=${userToken}`,
+      `${GRAPH}/me/accounts?fields=id,name,access_token,instagram_business_account,picture.type(large)&limit=100`,
     );
 
     // Also check Business Manager pages
     try {
-      let bizUrl: string | undefined =
-        `${GRAPH}/me/businesses?access_token=${userToken}`;
+      let bizUrl: string | undefined = `${GRAPH}/me/businesses`;
 
       while (bizUrl) {
-        const bizRes = await fetch(bizUrl);
+        const bizRes = await fetch(bizUrl, { headers: authHeader });
         const bizJson = (await bizRes.json()) as {
           data?: { id: string }[];
           paging?: { next?: string };
@@ -380,14 +385,14 @@ export class OauthService {
         for (const biz of bizJson.data ?? []) {
           try {
             await fetchPaginated(
-              `${GRAPH}/${biz.id}/owned_pages?fields=id,name,access_token,instagram_business_account,picture.type(large)&limit=100&access_token=${userToken}`,
+              `${GRAPH}/${biz.id}/owned_pages?fields=id,name,access_token,instagram_business_account,picture.type(large)&limit=100`,
             );
           } catch {
             // continue
           }
           try {
             await fetchPaginated(
-              `${GRAPH}/${biz.id}/client_pages?fields=id,name,access_token,instagram_business_account,picture.type(large)&limit=100&access_token=${userToken}`,
+              `${GRAPH}/${biz.id}/client_pages?fields=id,name,access_token,instagram_business_account,picture.type(large)&limit=100`,
             );
           } catch {
             // continue
@@ -409,7 +414,8 @@ export class OauthService {
   ): Promise<{ id: string; name?: string; username?: string } | null> {
     try {
       const res = await fetch(
-        `${GRAPH}/${igId}?fields=id,name,username&access_token=${userToken}`,
+        `${GRAPH}/${igId}?fields=id,name,username`,
+        { headers: { Authorization: `Bearer ${userToken}` } },
       );
       return (await res.json()) as { id: string; name?: string; username?: string };
     } catch {
@@ -443,12 +449,37 @@ export class OauthService {
     return payload;
   }
 
-  private cleanupExpiredStates() {
-    const now = Date.now();
-    for (const [state, data] of this.oauthStates.entries()) {
-      if (now - data.createdAt > FIVE_MINUTES_MS) {
-        this.oauthStates.delete(state);
+  private async storeOAuthState(state: string, entry: OAuthStateEntry) {
+    if (this.redis) {
+      await this.redis.set(`oauth:${state}`, JSON.stringify(entry), 'EX', 300);
+    } else {
+      this.fallbackStates.set(state, entry);
+      const now = Date.now();
+      for (const [k, v] of this.fallbackStates.entries()) {
+        if (now - v.createdAt > FIVE_MINUTES_MS) this.fallbackStates.delete(k);
       }
+    }
+  }
+
+  private async getOAuthState(state: string): Promise<OAuthStateEntry | null> {
+    if (this.redis) {
+      const json = await this.redis.get(`oauth:${state}`);
+      return json ? (JSON.parse(json) as OAuthStateEntry) : null;
+    }
+    const entry = this.fallbackStates.get(state);
+    if (!entry) return null;
+    if (Date.now() - entry.createdAt > FIVE_MINUTES_MS) {
+      this.fallbackStates.delete(state);
+      return null;
+    }
+    return entry;
+  }
+
+  private async deleteOAuthState(state: string) {
+    if (this.redis) {
+      await this.redis.del(`oauth:${state}`);
+    } else {
+      this.fallbackStates.delete(state);
     }
   }
 

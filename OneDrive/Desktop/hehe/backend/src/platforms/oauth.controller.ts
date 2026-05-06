@@ -18,23 +18,23 @@ export class OauthController {
 
   @UseGuards(JwtAuthGuard)
   @Get(':platform/authorize')
-  authorize(
+  async authorize(
     @Param('platform') platform: string,
     @Req() req: { user: AuthenticatedRequestUser },
     @Res() res: Response,
   ) {
-    const url = this.oauthService.getAuthorizeUrl(platform, req.user.userId);
+    const url = await this.oauthService.getAuthorizeUrl(platform, req.user.userId);
     return res.redirect(url);
   }
 
   @UseGuards(JwtAuthGuard)
   @Get(':platform/url')
-  getAuthorizeUrl(
+  async getAuthorizeUrl(
     @Param('platform') platform: string,
     @Req() req: { user: AuthenticatedRequestUser },
   ) {
     return {
-      url: this.oauthService.getAuthorizeUrl(platform, req.user.userId),
+      url: await this.oauthService.getAuthorizeUrl(platform, req.user.userId),
     };
   }
 

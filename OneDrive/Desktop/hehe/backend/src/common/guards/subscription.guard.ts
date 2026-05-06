@@ -25,9 +25,8 @@ export class SubscriptionGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<Request & {
       user?: AuthenticatedRequestUser;
-      body?: { teamId?: string };
     }>();
-    const teamId = request.body?.teamId ?? request.user?.team_id;
+    const teamId = request.user?.team_id;
     if (!teamId) {
       throw new ForbiddenException('Team context is required');
     }

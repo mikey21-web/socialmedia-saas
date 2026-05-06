@@ -24,7 +24,7 @@ export class MediaController {
   constructor(private readonly mediaService: MediaService) {}
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }))
   async upload(
     @TeamId() teamId: string | undefined,
     @UploadedFile() file: MediaUploadedFile,
@@ -41,6 +41,7 @@ export class MediaController {
   ) {
     if (!teamId) throw new BadRequestException('Missing team context');
     if (!body.prompt) throw new BadRequestException('prompt required');
+    if (body.prompt.length > 1000) throw new BadRequestException('prompt too long');
     return this.mediaService.generateImage(teamId, body.prompt);
   }
 
@@ -51,6 +52,10 @@ export class MediaController {
   ) {
     if (!teamId) throw new BadRequestException('Missing team context');
     if (!body.prompt) throw new BadRequestException('prompt required');
+    if (body.prompt.length > 1000) throw new BadRequestException('prompt too long');
+    if (body.duration !== undefined && (body.duration < 1 || body.duration > 60)) {
+      throw new BadRequestException('invalid duration');
+    }
     return this.mediaService.generateVideo(teamId, body.prompt, body.duration);
   }
 

@@ -318,10 +318,10 @@ export class PlatformsService {
   }
 
   private deriveKey(userId: string) {
-    const secret = process.env.JWT_SECRET;
+    const secret = process.env.TOKEN_ENCRYPTION_KEY;
 
     if (!secret) {
-      throw new BadRequestException('JWT_SECRET is not configured');
+      throw new Error('TOKEN_ENCRYPTION_KEY env not set');
     }
 
     return createHash('sha256')

@@ -74,13 +74,10 @@ export class AuthService {
       where: { email },
     });
 
-    if (!user) {
-      throw new BadRequestException('Invalid credentials');
-    }
+    const DUMMY_HASH = '$2b$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ012345';
+    const isPasswordValid = await bcrypt.compare(password, user?.password ?? DUMMY_HASH);
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-
-    if (!isPasswordValid) {
+    if (!user || !isPasswordValid) {
       throw new BadRequestException('Invalid credentials');
     }
 

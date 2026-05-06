@@ -177,6 +177,7 @@ export class PostsService {
     const post = await this.prisma.post.findFirst({
       where: {
         id: postId,
+        teamId,
         deletedAt: null,
       },
       include: {
@@ -190,10 +191,6 @@ export class PostsService {
 
     if (!post) {
       throw new NotFoundException('Post not found');
-    }
-
-    if (post.teamId !== teamId) {
-      throw new ForbiddenException('You do not have access to this post');
     }
 
     if (dto.content) {
