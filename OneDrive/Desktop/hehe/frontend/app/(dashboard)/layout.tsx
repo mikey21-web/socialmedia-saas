@@ -5,15 +5,19 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import {
   BarChart2,
+  Bot,
   Calendar,
   FileImage,
   FileText,
+  Flame,
   FolderKanban,
+  Inbox,
   LayoutDashboard,
   Menu,
   Repeat2,
   Rss,
   Settings,
+  Users,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,15 +26,19 @@ import { AuthGuard } from "@/components/auth-guard";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/dashboard",  label: "Dashboard", icon: LayoutDashboard },
-  { href: "/posts",      label: "Posts",     icon: FileText },
-  { href: "/calendar",   label: "Calendar",  icon: Calendar },
-  { href: "/media",      label: "Media Library", icon: FileImage },
-  { href: "/recurring",  label: "Recurring", icon: Repeat2 },
-  { href: "/rss",        label: "RSS Feeds", icon: Rss },
-  { href: "/sets",       label: "Sets",      icon: FolderKanban },
-  { href: "/analytics",  label: "Analytics", icon: BarChart2 },
-  { href: "/settings",   label: "Settings",  icon: Settings },
+  { href: "/dashboard",              label: "Dashboard",    icon: LayoutDashboard },
+  { href: "/inbox",                  label: "Inbox",        icon: Inbox },
+  { href: "/trends",                 label: "Trends",       icon: Flame },
+  { href: "/competitors",            label: "Competitors",  icon: Users },
+  { href: "/posts",                  label: "Posts",        icon: FileText },
+  { href: "/calendar",               label: "Calendar",     icon: Calendar },
+  { href: "/media",                  label: "Media",        icon: FileImage },
+  { href: "/recurring",              label: "Recurring",    icon: Repeat2 },
+  { href: "/rss",                    label: "RSS Feeds",    icon: Rss },
+  { href: "/sets",                   label: "Sets",         icon: FolderKanban },
+  { href: "/analytics",              label: "Analytics",    icon: BarChart2 },
+  { href: "/settings/automation",    label: "Automation",   icon: Bot },
+  { href: "/settings",               label: "Settings",     icon: Settings },
 ];
 
 function DashboardNav({

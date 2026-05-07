@@ -44,6 +44,9 @@ model Team {
   thirdParties      ThirdPartyIntegration[]
   mediaAssets       MediaAsset[]
   rssSources        RssSource[]
+  trendItems        TrendItem[]
+  brandProfile      BrandProfile?
+  agentRuns         AgentRun[]
 
   @@index([ownerId])
 }
@@ -67,7 +70,7 @@ model Post {
   title             String
   content           String
   mediaUrls         Json      @default("[]")
-  status            String    @default("draft")
+  status            String    @default("draft") // draft | awaiting_approval | approved | scheduled | published | rejected
   scheduledAt       DateTime?
   postDelay         Int?
   isRecurring       Boolean   @default(false)
@@ -75,6 +78,10 @@ model Post {
   recurrenceEndAt   DateTime?
   nextPublishAt     DateTime?
   postSetId         String?
+  generatedBy       String?   // "user" | "content_agent" | "trend_agent"
+  generationContext Json?     // { topic, intent, angle, runId }
+  agentRunId        String?
+  rejectionReason   String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   deletedAt         DateTime?
@@ -241,6 +248,30 @@ model RssSource {
   @@index([teamId])
 }
 
+model TrendItem {
+  id             String   @id @default(cuid())
+  teamId         String
+  title          String
+  summary        String   @db.Text
+  url            String?
+  source         String
+  category       String?
+  relevanceScore Float    @default(0)
+  brandFitReason String?  @db.Text
+  pillar         String?
+  status         String   @default("pending")
+  convertedPostId String?
+  detectedAt     DateTime @default(now())
+  expiresAt      DateTime
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([status])
+  @@index([relevanceScore])
+  @@index([detectedAt])
+}
+
 model AuditLog {
   id         String   @id @default(cuid())
   adminId    String
@@ -255,4 +286,138 @@ model AuditLog {
   @@index([adminId])
   @@index([targetId])
   @@index([action])
+}
+
+// ─── Brand Brain ──────────────────────────────────────────────────────────────
+
+model BrandProfile {
+  id              String   @id @default(cuid())
+  teamId          String   @unique
+  brandName       String
+  industry        String
+  description     String   @db.Text
+
+  // Voice
+  voiceTone       String
+  voiceTraits     String[] @default([])
+  formalityLevel  Int      @default(5)
+
+  // Audience
+  audienceAge     String
+  audienceGender  String
+  audienceLocation String[] @default([])
+  audienceInterests String[] @default([])
+  audiencePainPoints String[] @default([])
+
+  // Goals
+  primaryGoal     String
+  secondaryGoals  String[] @default([])
+
+  // Posting strategy
+  platforms       String[] @default([])
+  postsPerWeek    Json     @default("{}")
+  contentMix      Json     @default("{}")
+
+  // Voice rules
+  alwaysWords     String[] @default([])
+  neverWords      String[] @default([])
+  emojiUsage      String   @default("moderate")
+  hashtagStyle    String   @default("moderate")
+
+  // Autonomy
+  autonomousMode  Boolean  @default(false)
+  approvalRequired Boolean @default(true)
+
+  // Meta
+  onboardingComplete Boolean @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  team            Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  pillars         ContentPillar[]
+  competitors     Competitor[]
+  voiceExamples   VoiceExample[]
+
+  @@index([teamId])
+}
+
+model ContentPillar {
+  id              String   @id @default(cuid())
+  brandProfileId  String
+  name            String
+  description     String   @db.Text
+  weight          Int      @default(20)
+  keywords        String[] @default([])
+  createdAt       DateTime @default(now())
+
+  brandProfile    BrandProfile @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
+
+  @@index([brandProfileId])
+}
+
+model Competitor {
+  id              String   @id @default(cuid())
+  brandProfileId  String
+  name            String
+  handles         Json     @default("{}")
+  url             String?
+  notes           String?  @db.Text
+  isActive        Boolean  @default(true)
+  lastScrapedAt   DateTime?
+  createdAt       DateTime @default(now())
+
+  brandProfile    BrandProfile @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
+  snapshots       CompetitorSnapshot[]
+
+  @@index([brandProfileId])
+}
+
+model CompetitorSnapshot {
+  id              String   @id @default(cuid())
+  competitorId    String
+  platform        String
+  postsCount      Int
+  followersCount  Int?
+  topPosts        Json     @default("[]")
+  capturedAt      DateTime @default(now())
+
+  competitor      Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId])
+  @@index([capturedAt])
+}
+
+model VoiceExample {
+  id              String   @id @default(cuid())
+  brandProfileId  String
+  content         String   @db.Text
+  platform        String?
+  performanceScore Int?
+  source          String   @default("manual")
+  createdAt       DateTime @default(now())
+
+  brandProfile    BrandProfile @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
+
+  @@index([brandProfileId])
+}
+
+// ─── Agent Infrastructure ─────────────────────────────────────────────────────
+
+model AgentRun {
+  id              String    @id @default(cuid())
+  teamId          String
+  agentType       String
+  status          String    @default("running")
+  input           Json
+  output          Json?
+  error           String?
+  steps           Json      @default("[]")
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  team            Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([agentType])
+  @@index([status])
 }
