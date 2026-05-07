@@ -30,4 +30,5 @@ export type PublishWorkflowInput = {
   postId: string;
   teamId: string;
   taskQueue?: string;
+  scheduledAt?: Date;
 };

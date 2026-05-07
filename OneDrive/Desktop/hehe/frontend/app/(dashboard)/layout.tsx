@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -7,6 +7,7 @@ import {
   BarChart2,
   Bot,
   Calendar,
+  CheckCircle2,
   FileImage,
   FileText,
   Flame,
@@ -17,12 +18,14 @@ import {
   Repeat2,
   Rss,
   Settings,
+  Sparkles,
   Users,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AuthGuard } from "@/components/auth-guard";
+import { UpgradeBanner } from "@/components/upgrade-banner";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -31,12 +34,14 @@ const navItems = [
   { href: "/trends",                 label: "Trends",       icon: Flame },
   { href: "/competitors",            label: "Competitors",  icon: Users },
   { href: "/posts",                  label: "Posts",        icon: FileText },
+  { href: "/approval/queue",          label: "Approval",     icon: CheckCircle2 },
   { href: "/calendar",               label: "Calendar",     icon: Calendar },
   { href: "/media",                  label: "Media",        icon: FileImage },
   { href: "/recurring",              label: "Recurring",    icon: Repeat2 },
   { href: "/rss",                    label: "RSS Feeds",    icon: Rss },
   { href: "/sets",                   label: "Sets",         icon: FolderKanban },
-  { href: "/analytics",              label: "Analytics",    icon: BarChart2 },
+{ href: "/analytics",              label: "Analytics",    icon: BarChart2 },
+  { href: "/recommendations",        label: "Ideas",        icon: Sparkles },
   { href: "/settings/automation",    label: "Automation",   icon: Bot },
   { href: "/settings",               label: "Settings",     icon: Settings },
 ];
@@ -50,10 +55,14 @@ function DashboardNav({
   mobile?: boolean;
   onNavigate: () => void;
 }) {
+  const activeHref = navItems
+    .filter(({ href }) => pathname === href || pathname.startsWith(`${href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0]?.href;
+
   return (
     <nav className={cn("flex-1 p-3 space-y-1", mobile && "pt-2")}>
       {navItems.map(({ href, label, icon: Icon }) => {
-        const active = pathname === href || pathname.startsWith(`${href}/`);
+        const active = href === activeHref;
         return (
           <Link
             key={href}
@@ -84,14 +93,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex h-dvh bg-background">
       <aside className="hidden md:flex w-60 shrink-0 border-r border-border bg-sidebar flex-col">
         <div className="h-14 flex items-center px-5 border-b border-border">
-          <span className="font-semibold text-sm">Postiz</span>
+          <span className="font-semibold text-sm">Diyaa AI</span>
         </div>
         <DashboardNav pathname={pathname} onNavigate={() => setOpen(false)} />
       </aside>
 
       <div className="flex-1 overflow-hidden flex flex-col">
         <header className="h-14 border-b border-border bg-background flex items-center justify-between px-3 md:px-5">
-          <div className="font-semibold text-sm md:hidden">Postiz</div>
+          <div className="font-semibold text-sm md:hidden">Diyaa AI</div>
           <div className="hidden md:block text-sm text-muted-foreground">Workspace</div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
@@ -107,7 +116,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         )}
 
-        <main className="flex-1 overflow-auto bg-background">{children}</main>
+        <main className="flex-1 overflow-auto bg-background">
+          <UpgradeBanner />
+          {children}
+        </main>
       </div>
     </div>
     </AuthGuard>

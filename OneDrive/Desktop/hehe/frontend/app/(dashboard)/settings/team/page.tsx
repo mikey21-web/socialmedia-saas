@@ -5,6 +5,7 @@ import { MailPlus, Trash2, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { FormSkeleton } from "@/components/FormSkeleton";
 import { Input } from "@/components/ui/input";
 import { useTeamsStore } from "@/store/team";
 
@@ -43,6 +44,16 @@ export default function TeamSettingsPage() {
 
   async function handleRemove(userId: string) {
     await removeMember(teamId, userId);
+  }
+
+  if (loading && !team) {
+    return (
+      <div className="space-y-6 p-4 md:p-6">
+        <Card className="p-5">
+          <FormSkeleton fieldCount={3} />
+        </Card>
+      </div>
+    );
   }
 
   return (

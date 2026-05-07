@@ -16,13 +16,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ArrowDownRight, ArrowUpRight, Loader2 } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, BarChart2, Clock, Hash, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PlatformBadge, type Platform } from "@/components/platform-badge";
-import { PLATFORM_HEX, useAnalyticsStore, type AnalyticsPreset, type AnalyticsTopPost } from "@/store/analytics";
+import { PLATFORM_HEX, useAnalyticsStore, type AnalyticsPreset, type AnalyticsTopPost, type PlatformROI, type BestPostingTime, type ContentTrends } from "@/store/analytics";
+import { ExportButton } from "../posts/export-button";
 
 const PRESETS: Array<{ value: AnalyticsPreset; label: string; days?: number }> = [
   { value: "7d", label: "Last 7 days", days: 7 },
@@ -126,14 +127,36 @@ export default function AnalyticsPage() {
   const to = useAnalyticsStore((state) => state.to);
   const summary = useAnalyticsStore((state) => state.summary);
   const previousSummary = useAnalyticsStore((state) => state.previousSummary);
+  const lastUpdated = useAnalyticsStore((state) => state.lastUpdated);
   const loading = useAnalyticsStore((state) => state.loading);
   const error = useAnalyticsStore((state) => state.error);
   const setRange = useAnalyticsStore((state) => state.setRange);
   const fetchSummary = useAnalyticsStore((state) => state.fetchSummary);
+  const fetchLastUpdated = useAnalyticsStore((state) => state.fetchLastUpdated);
+  const platformROI = useAnalyticsStore((state) => state.platformROI);
+  const bestPostingTimes = useAnalyticsStore((state) => state.bestPostingTimes);
+  const contentTrends = useAnalyticsStore((state) => state.contentTrends);
+  const fetchPlatformROI = useAnalyticsStore((state) => state.fetchPlatformROI);
+  const fetchBestPostingTimes = useAnalyticsStore((state) => state.fetchBestPostingTimes);
+  const fetchContentTrends = useAnalyticsStore((state) => state.fetchContentTrends);
 
   useEffect(() => {
     void fetchSummary(from, to);
-  }, [fetchSummary, from, to]);
+    void fetchLastUpdated();
+    void fetchPlatformROI(from, to);
+    void fetchBestPostingTimes();
+    void fetchContentTrends();
+  }, [fetchSummary, fetchLastUpdated, from, to, fetchPlatformROI, fetchBestPostingTimes, fetchContentTrends]);
+
+  const metricsStatus = useMemo(() => {
+    if (!lastUpdated) return 'Pending';
+    const updated = new Date(lastUpdated);
+    const now = new Date();
+    const diffMs = now.getTime() - updated.getTime();
+    const diffHours = diffMs / (1000 * 60 * 60);
+    if (diffHours < 1) return 'Pending';
+    return updated.toLocaleString();
+  }, [lastUpdated]);
 
   const platformSeries = useMemo(
     () => summary?.byPlatform.map((entry) => entry.platform as Platform) ?? [],
@@ -221,8 +244,15 @@ export default function AnalyticsPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Performance snapshots, reach breakdowns, and top-performing content.
           </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Metrics: {metricsStatus}
+          </p>
         </div>
         <div className="flex flex-col gap-3 xl:items-end">
+          <div className="flex items-center gap-2">
+            <ExportButton type="posts" />
+            <ExportButton type="trends" />
+          </div>
           <Tabs
             value={preset}
             onValueChange={(value) => {
@@ -364,6 +394,7 @@ export default function AnalyticsPage() {
                     <Tooltip contentStyle={TOOLTIP_STYLE} />
                     <Legend />
                     <Bar dataKey="impressions" fill="#60a5fa" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="reach" fill="#a78bfa" radius={[6, 6, 0, 0]} />
                     <Bar dataKey="likes" fill="#f472b6" radius={[6, 6, 0, 0]} />
                     <Bar dataKey="comments" fill="#34d399" radius={[6, 6, 0, 0]} />
                     <Bar dataKey="shares" fill="#fbbf24" radius={[6, 6, 0, 0]} />
@@ -399,6 +430,136 @@ export default function AnalyticsPage() {
                     <Area type="monotone" dataKey="engagements" stroke="#34d399" fill="url(#daily-engagements)" strokeWidth={2} dot={false} />
                   </AreaChart>
                 </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Platform ROI</CardTitle>
+                <CardDescription>Return on investment by platform.</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[320px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={platformROI} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <CartesianGrid stroke="rgba(255,255,255,0.06)" strokeDasharray="3 3" />
+                    <XAxis dataKey="platform" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} />
+                    <Tooltip contentStyle={TOOLTIP_STYLE} />
+                    <Legend />
+                    <Bar dataKey="impressions" fill="#60a5fa" stackId="a" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="engagements" fill="#34d399" stackId="a" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="reach" fill="#a78bfa" stackId="b" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Best posting times</CardTitle>
+                <CardDescription>Top 3 time slots per platform by avg engagement.</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[320px] overflow-y-auto">
+                <div className="space-y-4">
+                  {Object.entries(bestPostingTimes).map(([platform, times]) => (
+                    <div key={platform}>
+                      <div className="mb-2 flex items-center gap-2">
+                        <PlatformBadge platform={platform as Platform} />
+                      </div>
+                      <div className="space-y-1">
+                        {times.map((slot, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-sm">
+                            <span className="flex items-center gap-2 text-muted-foreground">
+                              <Clock className="size-3.5" />
+                              {slot.day} {slot.hour}:00
+                            </span>
+                            <span className="font-medium">{Math.round(slot.avgEngagement)} avg engagement</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  {Object.keys(bestPostingTimes).length === 0 && (
+                    <p className="text-sm text-muted-foreground">Not enough data yet.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+            <Card>
+              <CardHeader>
+                <CardTitle>Content trends</CardTitle>
+                <CardDescription>Trending hashtags and content types.</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[320px]">
+                <div className="mb-4">
+                  <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+                    <Hash className="size-4" />
+                    Top Hashtags
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {contentTrends?.topHashtags.slice(0, 10).map((item) => (
+                      <span
+                        key={item.tag}
+                        className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs"
+                      >
+                        {item.tag}
+                        <span className="text-muted-foreground">({item.count})</span>
+                      </span>
+                    ))}
+                    {(!contentTrends || contentTrends.topHashtags.length === 0) && (
+                      <p className="text-sm text-muted-foreground">No trending hashtags.</p>
+                    )}
+                  </div>
+                </div>
+                <div className="h-[180px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={contentTrends?.contentTypeBreakdown ?? []}
+                        dataKey="count"
+                        nameKey="type"
+                        innerRadius={48}
+                        outerRadius={72}
+                        paddingAngle={2}
+                      >
+                        {contentTrends?.contentTypeBreakdown.map((entry, index) => (
+                          <Cell
+                            key={entry.type}
+                            fill={['#60a5fa', '#34d399', '#fbbf24'][index % 3]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={TOOLTIP_STYLE} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Engagement prediction tips</CardTitle>
+                <CardDescription>AI-generated suggestions for better engagement.</CardDescription>
+              </CardHeader>
+              <CardContent className="h-[320px]">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Sparkles className="size-4 text-amber-400" />
+                    Tips for better performance
+                  </div>
+                  <ul className="list-inside list-disc space-y-2 text-sm text-muted-foreground">
+                    <li>Keep captions between 100-280 characters for best engagement.</li>
+                    <li>Include 1-3 relevant hashtags for discoverability.</li>
+                    <li>Use questions or CTAs to drive comments and shares.</li>
+                    <li>Post during peak hours: mornings (9-11am) and evenings (6-9pm).</li>
+                  </ul>
+                </div>
               </CardContent>
             </Card>
           </div>

@@ -170,6 +170,41 @@ export class PlatformsService {
     }));
   }
 
+  async listTeamCredentials(teamId: string) {
+    const credentials = await this.prisma.platformCredential.findMany({
+      where: { teamId },
+      orderBy: [{ platform: 'asc' }, { createdAt: 'desc' }],
+      select: {
+        id: true,
+        platform: true,
+        accountId: true,
+        accountName: true,
+        expiresAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const now = Date.now();
+    return credentials.map((credential) => ({
+      ...credential,
+      status: credential.expiresAt && credential.expiresAt.getTime() <= now ? 'expired' : 'connected',
+    }));
+  }
+
+  async deleteCredential(teamId: string, credentialId: string) {
+    const credential = await this.prisma.platformCredential.findFirst({
+      where: { id: credentialId, teamId },
+      select: { id: true },
+    });
+    if (!credential) {
+      throw new NotFoundException('Platform credential not found');
+    }
+
+    await this.prisma.platformCredential.delete({ where: { id: credentialId } });
+    return { deleted: true };
+  }
+
   async getCredentialById(userId: string, credentialId: string) {
     const key = this.deriveKey(userId);
     const credential = await this.prisma.platformCredential.findFirst({
@@ -318,10 +353,18 @@ export class PlatformsService {
   }
 
   private deriveKey(userId: string) {
+    const encryptionKey = process.env.ENCRYPTION_KEY;
+    if (encryptionKey) {
+      const decoded = Buffer.from(encryptionKey, 'hex');
+      if (decoded.length === 32) {
+        return decoded;
+      }
+    }
+
     const secret = process.env.TOKEN_ENCRYPTION_KEY;
 
     if (!secret) {
-      throw new Error('TOKEN_ENCRYPTION_KEY env not set');
+      throw new Error('ENCRYPTION_KEY env not set');
     }
 
     return createHash('sha256')

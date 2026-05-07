@@ -9,7 +9,7 @@ import { CommentsService } from './comments.service';
 export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}
 
-  @Post()
+@Post()
   create(
     @Param('postId') postId: string,
     @Req() req: { user: AuthenticatedRequestUser },
@@ -20,6 +20,7 @@ export class CommentsController {
       req.user.team_id,
       req.user.userId,
       dto.content,
+      dto.parentCommentId,
     );
   }
 

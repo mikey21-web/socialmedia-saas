@@ -9,6 +9,7 @@ export type AnalyticsPreset = "7d" | "30d" | "90d" | "custom";
 export interface AnalyticsPlatformSummary {
   platform: string;
   impressions: number;
+  reach: number;
   likes: number;
   comments: number;
   shares: number;
@@ -38,16 +39,47 @@ export interface AnalyticsSummary {
   topPosts: AnalyticsTopPost[];
 }
 
+export interface PlatformROI {
+  platform: string;
+  impressions: number;
+  engagements: number;
+  reach: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  posts: number;
+  engagementRate: number;
+}
+
+export interface BestPostingTime {
+  day: string;
+  hour: number;
+  avgEngagement: number;
+}
+
+export interface ContentTrends {
+  topHashtags: Array<{ tag: string; count: number }>;
+  contentTypeBreakdown: Array<{ type: string; count: number }>;
+}
+
 interface AnalyticsState {
   preset: AnalyticsPreset;
   from: string;
   to: string;
   summary: AnalyticsSummary | null;
   previousSummary: AnalyticsSummary | null;
+  lastUpdated: string | null;
   loading: boolean;
   error: string | null;
+  platformROI: PlatformROI[];
+  bestPostingTimes: Record<string, BestPostingTime[]>;
+  contentTrends: ContentTrends | null;
   setRange: (preset: AnalyticsPreset, from: string, to: string) => void;
   fetchSummary: (from: string, to: string) => Promise<void>;
+  fetchLastUpdated: () => Promise<void>;
+  fetchPlatformROI: (from?: string, to?: string) => Promise<void>;
+  fetchBestPostingTimes: () => Promise<void>;
+  fetchContentTrends: () => Promise<void>;
 }
 
 function toIsoDate(value: Date) {
@@ -82,10 +114,23 @@ export const useAnalyticsStore = create<AnalyticsState>((set) => ({
   ...createDefaultRange(),
   summary: null,
   previousSummary: null,
+  lastUpdated: null,
   loading: false,
   error: null,
+  platformROI: [],
+  bestPostingTimes: {},
+  contentTrends: null,
 
   setRange: (preset, from, to) => set({ preset, from, to }),
+
+  fetchLastUpdated: async () => {
+    try {
+      const response = await api.get<{ lastUpdated: string | null }>('/analytics/last-updated');
+      set({ lastUpdated: response.data.lastUpdated });
+    } catch {
+      set({ lastUpdated: null });
+    }
+  },
 
   fetchSummary: async (from, to) => {
     set({ loading: true, error: null });
@@ -115,6 +160,36 @@ export const useAnalyticsStore = create<AnalyticsState>((set) => ({
         loading: false,
         error: error instanceof Error ? error.message : "Failed to fetch analytics summary",
       });
+    }
+  },
+
+  fetchPlatformROI: async (from?, to?) => {
+    try {
+      const params: Record<string, string> = {};
+      if (from) params.startDate = new Date(`${from}T00:00:00.000Z`).toISOString();
+      if (to) params.endDate = new Date(`${to}T23:59:59.999Z`).toISOString();
+      const response = await api.get<PlatformROI[]>("/analytics/platform-roi", { params });
+      set({ platformROI: response.data });
+    } catch {
+      set({ platformROI: [] });
+    }
+  },
+
+  fetchBestPostingTimes: async () => {
+    try {
+      const response = await api.get<Record<string, BestPostingTime[]>>("/analytics/best-posting-times");
+      set({ bestPostingTimes: response.data });
+    } catch {
+      set({ bestPostingTimes: {} });
+    }
+  },
+
+  fetchContentTrends: async () => {
+    try {
+      const response = await api.get<ContentTrends>("/analytics/content-trends");
+      set({ contentTrends: response.data });
+    } catch {
+      set({ contentTrends: null });
     }
   },
 }));

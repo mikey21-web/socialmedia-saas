@@ -1,154 +1,122 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, CreditCard, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { AlertCircle, CreditCard, Loader2, Settings } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { api } from "@/lib/api";
 
-type Plan = "free" | "pro";
-
-const TIERS: Array<{
-  key: Plan;
-  title: string;
-  price: string;
-  subtitle: string;
-  features: string[];
-}> = [
-  {
-    key: "free",
-    title: "Free",
-    price: "$0/mo",
-    subtitle: "Best to get started",
-    features: ["1 post/day", "Basic scheduling", "Single workspace"],
-  },
-  {
-    key: "pro",
-    title: "Pro",
-    price: "$19/mo",
-    subtitle: "For serious growth",
-    features: ["Unlimited posts", "Advanced analytics", "Team collaboration"],
-  },
-];
+type SubscriptionStatus = {
+  plan: "free" | "pro";
+  status: string;
+  currentPeriodEnd: string | null;
+  seats: number;
+  limits: {
+    posts: { current: number; max: number };
+    platforms: { current: number; max: number };
+  };
+};
 
 export default function BillingSettingsPage() {
-  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<SubscriptionStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [action, setAction] = useState<"checkout" | "portal" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [plan, setPlan] = useState<Plan>("free");
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const params = new URLSearchParams(window.location.search);
-      const stripeStatus = params.get("stripe");
-      if (stripeStatus === "success") {
-        setSuccessMessage("Billing updated successfully.");
-        setPlan("pro");
-      } else if (stripeStatus === "cancel") {
-        setError("Checkout canceled. No charges were made.");
-      }
-    }, 0);
-    return () => window.clearTimeout(timer);
+    api
+      .get<SubscriptionStatus>("/api/subscriptions/status")
+      .then((response) => setStatus(response.data))
+      .catch(() => setError("Unable to load billing status."))
+      .finally(() => setLoading(false));
   }, []);
 
-  const currentLabel = useMemo(() => (plan === "pro" ? "Pro" : "Free"), [plan]);
-
-  async function handleCheckout() {
-    setLoading(true);
+  async function redirectFrom(endpoint: "/api/subscriptions/checkout" | "/api/subscriptions/portal", nextAction: "checkout" | "portal") {
+    setAction(nextAction);
     setError(null);
-    setSuccessMessage(null);
     try {
-      const response = await api.post<{ url?: string }>("/subscriptions/checkout");
-      if (response.data?.url) {
-        window.location.href = response.data.url;
-        return;
-      }
-      setError("Checkout session could not be created.");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to start checkout";
-      setError(message);
-    } finally {
-      setLoading(false);
+      const response = await api.post<{ url: string }>(endpoint);
+      window.location.href = response.data.url;
+    } catch {
+      setError("Unable to open Stripe. Please try again.");
+      setAction(null);
     }
   }
+
+  const periodEnd = status?.currentPeriodEnd
+    ? new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(status.currentPeriodEnd))
+    : "Not set";
 
   return (
     <div className="space-y-6 p-4 md:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold">Billing</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage your subscription and upgrade when you&apos;re ready.
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">Manage plan, usage, and Stripe billing.</p>
         </div>
-        <Badge variant="outline" className="h-8 px-3 text-xs w-fit">
-          Current Plan: {currentLabel}
-        </Badge>
+        {status && <Badge variant="outline" className="w-fit capitalize">{status.status.replace("_", " ")}</Badge>}
       </div>
-
-      {successMessage && (
-        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-400">
-          {successMessage}
-        </div>
-      )}
 
       {error && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive flex items-start gap-2">
-          <AlertCircle className="size-4 mt-0.5 shrink-0" />
-          <span>{error}</span>
+        <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
+          {error}
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {TIERS.map((tier) => (
-          <Card
-            key={tier.key}
-            className={`p-5 space-y-4 ${plan === tier.key ? "border-primary/50" : ""}`}
-          >
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">{tier.subtitle}</p>
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold">{tier.title}</h2>
-                <p className="text-sm font-medium">{tier.price}</p>
+      <Card className="p-5">
+        {loading || !status ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Loading billing...
+          </div>
+        ) : (
+          <div className="grid gap-5 md:grid-cols-[1fr_auto] md:items-center">
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Current plan</p>
+                <h2 className="mt-1 text-2xl font-semibold">{status.plan === "pro" ? "Pro" : "Free"}</h2>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Metric label="Posts used this month" value={`${status.limits.posts.current}/${status.limits.posts.max}`} />
+                <Metric label="Platforms connected" value={`${status.limits.platforms.current}/${status.limits.platforms.max}`} />
+                <Metric label="Current period end" value={periodEnd} />
               </div>
             </div>
-
-            <ul className="space-y-2">
-              {tier.features.map((feature) => (
-                <li key={feature} className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="size-4 text-emerald-400" />
-                  {feature}
-                </li>
-              ))}
-            </ul>
-
-            {tier.key === "pro" ? (
+            <div className="flex flex-col gap-2 sm:flex-row md:flex-col">
               <Button
-                onClick={handleCheckout}
-                disabled={loading || plan === "pro"}
-                className="w-full h-11 md:h-9 gap-2"
+                onClick={() => redirectFrom("/api/subscriptions/checkout", "checkout")}
+                disabled={action !== null || status.plan === "pro"}
+                className="h-11 gap-2 md:h-9"
               >
-                {loading ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" />
-                    Starting checkout...
-                  </>
-                ) : (
-                  <>
-                    <CreditCard className="size-4" />
-                    {plan === "pro" ? "You are on Pro" : "Upgrade to Pro"}
-                  </>
-                )}
+                {action === "checkout" ? <Loader2 className="size-4 animate-spin" /> : <CreditCard className="size-4" />}
+                Upgrade to Pro
               </Button>
-            ) : (
-              <Button variant="outline" disabled className="w-full h-11 md:h-9">
-                Current Free plan
-              </Button>
-            )}
-          </Card>
-        ))}
-      </div>
+              {status.plan === "pro" && (
+                <Button
+                  variant="outline"
+                  onClick={() => redirectFrom("/api/subscriptions/portal", "portal")}
+                  disabled={action !== null}
+                  className="h-11 gap-2 md:h-9"
+                >
+                  {action === "portal" ? <Loader2 className="size-4 animate-spin" /> : <Settings className="size-4" />}
+                  Manage Billing
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-border p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm font-medium">{value}</p>
     </div>
   );
 }

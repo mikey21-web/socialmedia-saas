@@ -1,13 +1,13 @@
 "use client";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { PlatformBadge } from "@/components/platform-badge";
-import type { CalendarPost } from "@/store/calendar";
+import { PlatformBadge, type Platform } from "@/components/platform-badge";
+import type { PostCalendarItem } from "@/lib/calendar";
 
 interface CalendarEventModalProps {
   open: boolean;
   onClose: () => void;
-  post: CalendarPost | null;
+  post: PostCalendarItem | null;
 }
 
 export function CalendarEventModal({ open, onClose, post }: CalendarEventModalProps) {
@@ -20,29 +20,25 @@ export function CalendarEventModal({ open, onClose, post }: CalendarEventModalPr
 
         {post && (
           <div className="space-y-4 text-sm">
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Content preview</p>
-              <p className="rounded-lg border border-border bg-muted/20 p-3 leading-6 text-foreground">
-                {post.content}
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Platforms</p>
-              <div className="flex flex-wrap gap-2">
-                {post.platforms.map((platform) => (
-                  <PlatformBadge key={platform} platform={platform} />
-                ))}
-              </div>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
+            {post.scheduledAt && (
               <div className="rounded-lg border border-border bg-muted/20 p-3">
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Scheduled time</p>
                 <p className="mt-1 font-medium">
                   {new Date(post.scheduledAt).toLocaleString()}
                 </p>
               </div>
+            )}
+
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Platforms</p>
+              <div className="flex flex-wrap gap-2">
+                {post.platforms.map((platform) => (
+                  <PlatformBadge key={platform} platform={platform as Platform} />
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-lg border border-border bg-muted/20 p-3">
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">Status</p>
                 <p className="mt-1 font-medium capitalize">{post.status}</p>

@@ -22,7 +22,7 @@ async function runWorker() {
     connection,
     namespace: process.env.TEMPORAL_NAMESPACE ?? 'default',
     taskQueue: process.env.TEMPORAL_TASK_QUEUE ?? 'posts-queue',
-    workflowsPath: require.resolve('../workflows'),
+    workflowsPath: require.resolve('../publishing/workflows'),
     activities: {
       ...createPublishingActivities(prisma, platformsService, emailService),
       ...createAnalyticsActivities(prisma, platformsService),

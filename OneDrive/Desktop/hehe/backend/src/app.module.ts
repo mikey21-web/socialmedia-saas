@@ -27,6 +27,7 @@ import { AgentsModule } from './agents/agents.module';
 import { AdminModule } from './admin/admin.module';
 import { BrandModule } from './brand/brand.module';
 import { InboxModule } from './inbox/inbox.module';
+import { RecommendationsModule } from './recommendations/recommendations.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -66,6 +67,7 @@ import { HealthController } from './health.controller';
     BrandModule,
     AgentsModule,
     InboxModule,
+    RecommendationsModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }, RedisProvider],

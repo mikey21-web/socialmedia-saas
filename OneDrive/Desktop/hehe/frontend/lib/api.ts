@@ -1,4 +1,5 @@
 import axios from "axios";
+import { emitSessionUnauthorized } from "@/lib/session-events";
 
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001",
@@ -24,8 +25,7 @@ api.interceptors.response.use(
   (r) => r,
   (err) => {
     if (err?.response?.status === 401 && typeof window !== "undefined") {
-      localStorage.removeItem("auth");
-      window.location.href = "/signin";
+      emitSessionUnauthorized();
     }
     return Promise.reject(err);
   }

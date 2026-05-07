@@ -121,6 +121,18 @@ export function createPublishingActivities(
           where: { id: input.postId },
           data: { status: finalStatus },
         });
+
+        for (const result of input.results) {
+          await tx.postPublishLog.create({
+            data: {
+              postId: input.postId,
+              platform: result.platform,
+              platformPostId: result.externalId ?? null,
+              status: result.success ? 'success' : 'failed',
+              error: result.error ?? null,
+            },
+          });
+        }
       });
 
       if (failedResults.length && emailService) {

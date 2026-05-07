@@ -26,7 +26,7 @@ export class PostsImportController {
     @UploadedFile() file: Express.Multer.File,
     @TeamId() teamId: string | undefined,
     @Query("dryRun") dryRun?: string,
-  ) {
+  ): Promise<unknown> {
     if (!file) {
       throw new BadRequestException("No file uploaded");
     }

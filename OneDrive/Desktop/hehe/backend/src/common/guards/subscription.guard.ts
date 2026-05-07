@@ -5,7 +5,7 @@ import { AuthenticatedRequestUser } from '../interfaces/authenticated-request-us
 import { TeamsService } from '../../teams/teams.service';
 
 export const SUBSCRIPTION_FEATURE_KEY = 'subscriptionFeature';
-export type SubscriptionFeature = 'posts' | 'analytics';
+export type SubscriptionFeature = 'posts' | 'analytics' | 'platforms' | 'members';
 
 @Injectable()
 export class SubscriptionGuard implements CanActivate {
@@ -37,9 +37,23 @@ export class SubscriptionGuard implements CanActivate {
     }
 
     if (feature === 'posts') {
-      const count = await this.teamsService.getDailyPostCount(teamId);
-      if (count >= 1) {
-        throw new ForbiddenException('Free plan is limited to 1 post per day');
+      const count = await this.teamsService.getMonthlyScheduledPostCount(teamId);
+      if (count >= 10) {
+        throw this.upgradeRequired('posts', count, 10);
+      }
+    }
+
+    if (feature === 'platforms') {
+      const count = await this.teamsService.getPlatformCredentialCount(teamId);
+      if (count >= 3) {
+        throw this.upgradeRequired('platforms', count, 3);
+      }
+    }
+
+    if (feature === 'members') {
+      const count = await this.teamsService.getTeamMemberCount(teamId);
+      if (count >= 2) {
+        throw this.upgradeRequired('members', count, 2);
       }
     }
 
@@ -51,5 +65,14 @@ export class SubscriptionGuard implements CanActivate {
     }
 
     return true;
+  }
+
+  private upgradeRequired(limit: 'posts' | 'platforms' | 'members', current: number, max: number) {
+    return new ForbiddenException({
+      code: 'UPGRADE_REQUIRED',
+      limit,
+      current,
+      max,
+    });
   }
 }

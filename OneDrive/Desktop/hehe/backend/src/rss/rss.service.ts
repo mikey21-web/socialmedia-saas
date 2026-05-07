@@ -104,7 +104,7 @@ export class RssService {
 
     await this.prisma.rssSource.update({
       where: { id: source.id },
-      data: { lastFetchAt: new Date() },
+      data: { lastFetch: new Date() },
     });
 
     return {

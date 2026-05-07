@@ -18,6 +18,14 @@ export interface PlatformDraft {
   fullCaption: string;
 }
 
+export interface PlatformCharLimits {
+  twitter: 280;
+  instagram: 200;
+  linkedin: 300;
+  facebook: 250;
+  tiktok: 150;
+}
+
 export interface ComplianceResult {
   passed: boolean;
   violations: string[];

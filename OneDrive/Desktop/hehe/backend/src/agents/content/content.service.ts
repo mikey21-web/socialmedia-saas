@@ -39,7 +39,6 @@ export class ContentService {
     });
 
     try {
-      // Step 1: Ideation
       const ideationStart = new Date();
       const ideationResult = await ideate(
         { topic: input.topic, intent: input.intent },
@@ -54,7 +53,6 @@ export class ContentService {
         output: ideationResult,
       });
 
-      // Step 2: Pick best angle
       const pickStart = new Date();
       const bestAngle = pickBestAngle(ideationResult.angles);
       steps.push({
@@ -65,7 +63,6 @@ export class ContentService {
         output: bestAngle,
       });
 
-      // Step 3: Adapt for each platform (parallel)
       const adaptStart = new Date();
       const drafts = await adaptForAllPlatforms(platforms, bestAngle, brand, this.llm);
       steps.push({
@@ -76,7 +73,6 @@ export class ContentService {
         output: drafts,
       });
 
-      // Step 4: Compliance check
       const complianceStart = new Date();
       const complianceResults = drafts.map((draft) => ({
         platform: draft.platform,
@@ -90,20 +86,18 @@ export class ContentService {
         output: complianceResults,
       });
 
-      // Check autonomous mode — skip inbox if enabled
       const brandProfile = await this.prisma.brandProfile.findUnique({
         where: { teamId },
         select: { autonomousMode: true },
       });
       const isAutonomous = brandProfile?.autonomousMode ?? false;
 
-      // Step 5: Save posts
       const postIds: string[] = [];
       for (const draft of drafts) {
         const compliance = complianceResults.find((c) => c.platform === draft.platform);
         const finalCaption = compliance?.correctedCaption ?? draft.fullCaption;
+        const wasTrimmed = finalCaption !== draft.fullCaption;
 
-        // Autonomous: schedule 24h from now at 9am; manual: awaiting_approval
         const autonomousScheduledAt = isAutonomous
           ? (() => {
               const d = new Date();
@@ -130,6 +124,9 @@ export class ContentService {
               platform: draft.platform,
               autonomous: isAutonomous,
               compliance: compliance ? JSON.parse(JSON.stringify(compliance)) : null,
+              wasTrimmed,
+              originalLength: draft.fullCaption.length,
+              finalLength: finalCaption.length,
             },
             platforms: {
               create: {
@@ -140,9 +137,14 @@ export class ContentService {
           },
         });
         postIds.push(post.id);
+
+        if (wasTrimmed) {
+          this.logger.debug(
+            `[${draft.platform}] Caption trimmed from ${draft.fullCaption.length} to ${finalCaption.length} chars`,
+          );
+        }
       }
 
-      // Mark run as completed
       await this.prisma.agentRun.update({
         where: { id: run.id },
         data: {
@@ -210,6 +212,9 @@ export class ContentService {
           ...context,
           regeneratedAt: new Date().toISOString(),
           compliance,
+          wasTrimmed: finalCaption !== draft.fullCaption,
+          originalLength: draft.fullCaption.length,
+          finalLength: finalCaption.length,
         },
       },
     });

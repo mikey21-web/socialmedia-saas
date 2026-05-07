@@ -1,13 +1,16 @@
 import { BadRequestException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
-import { createHash, randomBytes, randomUUID } from 'crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'crypto';
+import { JwtService } from '@nestjs/jwt';
 import type { Redis } from 'ioredis';
 import { REDIS_CLIENT } from '../common/redis.provider';
 import { PlatformsService } from './platforms.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 type OAuthPlatform = 'x' | 'instagram' | 'linkedin' | 'facebook' | 'youtube' | 'tiktok';
 
 type OAuthStateEntry = {
   userId: string;
+  teamId?: string;
   platform: OAuthPlatform;
   codeVerifier?: string;
   createdAt: number;
@@ -31,19 +34,29 @@ export class OauthService {
 
   constructor(
     private readonly platformsService: PlatformsService,
+    private readonly prisma: PrismaService,
+    private readonly jwtService: JwtService,
     @Optional() @Inject(REDIS_CLIENT) private readonly redis: Redis | null,
   ) {}
 
-  async getAuthorizeUrl(platform: string, userId: string) {
+  async getAuthorizeUrl(platform: string, userId: string, teamId?: string) {
     const normalizedPlatform = this.normalizePlatform(platform);
-    const state = randomUUID();
+    const resolvedTeamId = teamId ?? await this.resolveTeamId(userId);
+    const state = this.jwtService.sign(
+      { userId, teamId: resolvedTeamId, platform: normalizedPlatform },
+      {
+        secret: this.readJwtSecret(),
+        expiresIn: '10m',
+      },
+    );
     const oauthState: OAuthStateEntry = {
       userId,
+      teamId: resolvedTeamId,
       platform: normalizedPlatform,
       createdAt: Date.now(),
     };
 
-    const callbackUrl = this.getCallbackUrl();
+    const callbackUrl = this.getCallbackUrl(normalizedPlatform);
     let authorizeUrl: URL;
 
     if (normalizedPlatform === 'x') {
@@ -63,6 +76,7 @@ export class OauthService {
       authorizeUrl.searchParams.set('state', state);
       authorizeUrl.searchParams.set('code_challenge', codeChallenge);
       authorizeUrl.searchParams.set('code_challenge_method', 'S256');
+      await this.storeCodeVerifier(state, codeVerifier);
     } else if (normalizedPlatform === 'linkedin') {
       const clientId = this.readOAuthEnv('linkedin', 'CLIENT_ID');
 
@@ -227,7 +241,7 @@ export class OauthService {
   }
 
   private async exchangeXCode(code: string, codeVerifier: string) {
-    const callbackUrl = this.getCallbackUrl();
+    const callbackUrl = this.getCallbackUrl('x');
     const clientId = this.readOAuthEnv('x', 'CLIENT_ID');
 
     const response = await fetch('https://api.twitter.com/2/oauth2/token', {
@@ -247,7 +261,7 @@ export class OauthService {
   }
 
   private async exchangeLinkedInCode(code: string) {
-    const callbackUrl = this.getCallbackUrl();
+    const callbackUrl = this.getCallbackUrl('linkedin');
     const clientId = this.readOAuthEnv('linkedin', 'CLIENT_ID');
     const clientSecret = this.readOAuthEnv('linkedin', 'CLIENT_SECRET');
 
@@ -268,7 +282,7 @@ export class OauthService {
   }
 
   private async exchangeYouTubeCode(code: string) {
-    const callbackUrl = this.getCallbackUrl();
+    const callbackUrl = this.getCallbackUrl('youtube');
     const clientId = this.readOAuthEnv('youtube', 'CLIENT_ID');
     const clientSecret = this.readOAuthEnv('youtube', 'CLIENT_SECRET');
 
@@ -289,7 +303,7 @@ export class OauthService {
   }
 
   private async exchangeTikTokCode(code: string) {
-    const callbackUrl = this.getCallbackUrl();
+    const callbackUrl = this.getCallbackUrl('tiktok');
     const clientId = this.readOAuthEnv('tiktok', 'CLIENT_ID');
     const clientSecret = this.readOAuthEnv('tiktok', 'CLIENT_SECRET');
 
@@ -325,7 +339,7 @@ export class OauthService {
   }
 
   private async exchangeFacebookCode(code: string): Promise<string> {
-    const callbackUrl = this.getCallbackUrl();
+    const callbackUrl = this.getCallbackUrl('facebook');
     const clientId = this.readOAuthEnv('facebook', 'CLIENT_ID');
     const clientSecret = this.readOAuthEnv('facebook', 'CLIENT_SECRET');
 
@@ -462,6 +476,12 @@ export class OauthService {
   }
 
   private async getOAuthState(state: string): Promise<OAuthStateEntry | null> {
+    const decoded = this.decodeState(state);
+    if (decoded) {
+      const codeVerifier = await this.getCodeVerifier(state);
+      return { ...decoded, codeVerifier, createdAt: Date.now() };
+    }
+
     if (this.redis) {
       const json = await this.redis.get(`oauth:${state}`);
       return json ? (JSON.parse(json) as OAuthStateEntry) : null;
@@ -483,6 +503,80 @@ export class OauthService {
     }
   }
 
+  async refreshTokenIfExpired(credentialId: string) {
+    const credential = await this.prisma.platformCredential.findUnique({
+      where: { id: credentialId },
+    });
+    if (!credential) {
+      throw new BadRequestException('Platform credential not found');
+    }
+    if (!credential.expiresAt || credential.expiresAt.getTime() > Date.now() + 5 * 60 * 1000) {
+      return credential;
+    }
+    if (!credential.refreshToken) {
+      return credential;
+    }
+
+    const refreshToken = this.decryptToken(credential.refreshToken);
+    const refreshedTokens = await this.callRefreshTokenEndpoint(credential.platform, refreshToken);
+    const accessToken = this.encryptToken(refreshedTokens.accessToken);
+    const nextRefreshToken = refreshedTokens.refreshToken
+      ? this.encryptToken(refreshedTokens.refreshToken)
+      : credential.refreshToken;
+
+    return this.prisma.platformCredential.update({
+      where: { id: credential.id },
+      data: {
+        accessToken,
+        refreshToken: nextRefreshToken,
+        expiresAt: refreshedTokens.expiresAt,
+      },
+    });
+  }
+
+  encryptToken(raw: string) {
+    const key = this.getEncryptionKey();
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', key, iv);
+    const encrypted = Buffer.concat([cipher.update(raw, 'utf8'), cipher.final()]);
+    return `${iv.toString('base64')}.${cipher.getAuthTag().toString('base64')}.${encrypted.toString('base64')}`;
+  }
+
+  decryptToken(encrypted: string) {
+    const [ivB64, tagB64, encryptedB64] = encrypted.split('.');
+    if (!ivB64 || !tagB64 || !encryptedB64) {
+      throw new BadRequestException('Stored credential format is invalid');
+    }
+    const decipher = createDecipheriv('aes-256-gcm', this.getEncryptionKey(), Buffer.from(ivB64, 'base64'));
+    decipher.setAuthTag(Buffer.from(tagB64, 'base64'));
+    return Buffer.concat([
+      decipher.update(Buffer.from(encryptedB64, 'base64')),
+      decipher.final(),
+    ]).toString('utf8');
+  }
+
+  private async callRefreshTokenEndpoint(platform: string, refreshToken: string) {
+    const normalizedPlatform = this.normalizePlatform(platform);
+    const clientId = this.readOAuthEnv(normalizedPlatform, 'CLIENT_ID');
+    const clientSecret = this.readOAuthEnv(normalizedPlatform, 'CLIENT_SECRET');
+    const endpoint = normalizedPlatform === 'linkedin'
+      ? 'https://www.linkedin.com/oauth/v2/accessToken'
+      : 'https://api.twitter.com/2/oauth2/token';
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+    });
+    const payload = await this.extractJson(response);
+    return this.normalizeTokenResponse(payload);
+  }
+
   private normalizePlatform(platform: string): OAuthPlatform {
     const p = platform.toLowerCase();
     if (p !== 'x' && p !== 'instagram' && p !== 'linkedin' && p !== 'facebook' && p !== 'youtube' && p !== 'tiktok') {
@@ -491,15 +585,88 @@ export class OauthService {
     return p;
   }
 
-  private getCallbackUrl() {
-    return process.env.OAUTH_CALLBACK_URL ?? 'http://localhost:3001/oauth/callback';
+  private getCallbackUrl(platform: string) {
+    const normalizedPlatform = platform === 'x' ? 'TWITTER' : platform.toUpperCase();
+    return process.env[`${normalizedPlatform}_REDIRECT_URI`]
+      ?? process.env.OAUTH_CALLBACK_URL
+      ?? `http://localhost:3001/platforms/callback/${platform}`;
   }
 
   private readOAuthEnv(platform: string, key: 'CLIENT_ID' | 'CLIENT_SECRET') {
-    const envKey = `${platform.toUpperCase()}_${key}`;
+    const prefix = platform === 'x' ? 'TWITTER' : platform.toUpperCase();
+    const legacyPrefix = platform.toUpperCase();
+    const envKey = `${prefix}_${key}`;
+    const legacyEnvKey = `${legacyPrefix}_${key}`;
     const value = process.env[envKey];
+    if (!value && process.env[legacyEnvKey]) return process.env[legacyEnvKey] as string;
     if (!value) throw new BadRequestException(`${envKey} is not configured`);
     return value;
+  }
+
+  private async resolveTeamId(userId: string) {
+    const membership = await this.prisma.teamMember.findFirst({
+      where: { userId },
+      select: { teamId: true },
+      orderBy: { id: 'asc' },
+    });
+    if (!membership) {
+      throw new BadRequestException('User is not a member of any team');
+    }
+    return membership.teamId;
+  }
+
+  private readJwtSecret() {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) throw new BadRequestException('JWT_SECRET is not configured');
+    return secret;
+  }
+
+  private decodeState(state: string): OAuthStateEntry | null {
+    try {
+      const decoded = this.jwtService.verify(state, { secret: this.readJwtSecret() }) as {
+        userId?: unknown;
+        teamId?: unknown;
+        platform?: unknown;
+      };
+      if (typeof decoded.userId !== 'string' || typeof decoded.platform !== 'string') return null;
+      return {
+        userId: decoded.userId,
+        teamId: typeof decoded.teamId === 'string' ? decoded.teamId : undefined,
+        platform: this.normalizePlatform(decoded.platform),
+        createdAt: Date.now(),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private async storeCodeVerifier(state: string, codeVerifier: string) {
+    if (this.redis) {
+      await this.redis.set(`oauth:pkce:${state}`, codeVerifier, 'EX', 600);
+      return;
+    }
+    this.fallbackStates.set(`pkce:${state}`, {
+      userId: '',
+      platform: 'x',
+      codeVerifier,
+      createdAt: Date.now(),
+    });
+  }
+
+  private async getCodeVerifier(state: string) {
+    if (this.redis) {
+      return await this.redis.get(`oauth:pkce:${state}`) ?? undefined;
+    }
+    const entry = this.fallbackStates.get(`pkce:${state}`);
+    return entry?.codeVerifier;
+  }
+
+  private getEncryptionKey() {
+    const key = process.env.ENCRYPTION_KEY;
+    if (!key) throw new BadRequestException('ENCRYPTION_KEY is not configured');
+    const buffer = Buffer.from(key, 'hex');
+    if (buffer.length !== 32) throw new BadRequestException('ENCRYPTION_KEY must be 32-byte hex');
+    return buffer;
   }
 
   private readString(payload: Record<string, unknown>, keys: string[]) {

@@ -3,7 +3,6 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BrandService } from '../../brand/brand.service';
 import { LlmService } from '../llm/llm.service';
-// LlmService is provided via ContentAgentModule
 import { ContentService } from '../content/content.service';
 import { fetchRssTrends } from './sources/rss.source';
 import { scoreRelevance } from './pipeline/score-relevance';
@@ -48,16 +47,18 @@ export class TrendService {
 
     for (const trend of scored) {
       const existing = await this.prisma.trendItem.findFirst({
-        where: { teamId, url: trend.url },
+        where: { teamId, keyword: trend.title },
       });
       if (existing) continue;
 
       await this.prisma.trendItem.create({
         data: {
           teamId,
+          keyword: trend.title,
+          platform: 'auto',
           title: trend.title,
           summary: trend.summary.slice(0, 2000),
-          url: trend.url,
+          url: trend.url ?? null,
           source: trend.source,
           relevanceScore: trend.relevanceScore,
           brandFitReason: trend.brandFitReason,
@@ -75,9 +76,9 @@ export class TrendService {
     for (const trend of topTrends) {
       try {
         const result = await this.contentService.generate(teamId, {
-          topic: trend.title,
+          topic: trend.title ?? 'Trending topic',
           platforms: brand.platforms,
-          intent: `reactive post about: ${trend.summary.slice(0, 300)}`,
+          intent: `reactive post about: ${(trend.summary ?? '').slice(0, 300)}`,
         });
 
         await this.prisma.trendItem.updateMany({
@@ -139,9 +140,9 @@ export class TrendService {
 
     const brand = await this.brandService.getBrandContext(teamId);
     const result = await this.contentService.generate(teamId, {
-      topic: trend.title,
+      topic: trend.title ?? 'Trending topic',
       platforms: brand.platforms,
-      intent: `reactive post about: ${trend.summary.slice(0, 300)}`,
+      intent: `reactive post about: ${(trend.summary ?? '').slice(0, 300)}`,
     });
 
     await this.prisma.trendItem.update({

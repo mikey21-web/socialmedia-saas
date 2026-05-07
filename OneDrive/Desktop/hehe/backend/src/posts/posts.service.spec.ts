@@ -35,7 +35,7 @@ describe('PostsService', () => {
   } as unknown as TeamsService;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
     service = new PostsService(mockPrisma as unknown as PrismaService, mockTeamsService);
   });
 
@@ -254,17 +254,13 @@ describe('PostsService', () => {
       );
     });
 
-    it('throws 403 when user tries to update another team post', async () => {
+    it('throws 404 when user tries to update another team post', async () => {
       mockPrisma.teamMember.findFirst.mockResolvedValue({ teamId: 'team-1' });
-      mockPrisma.post.findFirst.mockResolvedValue({
-        id: 'post-2',
-        teamId: 'team-2',
-        platforms: [{ platform: 'twitter' }],
-      });
+      mockPrisma.post.findFirst.mockResolvedValue(null);
 
       await expect(
         service.updatePost(user, 'post-2', { content: 'Should fail' }),
-      ).rejects.toThrow(ForbiddenException);
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

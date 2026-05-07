@@ -2,13 +2,15 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { FileText, RotateCw } from "lucide-react";
+import { FileText, RotateCw, FlaskConical } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { PostModal } from "@/components/post-modal";
 import { PlatformBadge } from "@/components/platform-badge";
+import { AbTestModal } from "./create/ab-test-modal";
 import { usePostsStore } from "@/store/posts";
 import { cn } from "@/lib/utils";
+import { ExportButton } from "./export-button";
 
 type Status = "all" | "scheduled" | "published" | "draft";
 
@@ -20,6 +22,7 @@ const STATUS_STYLES: Record<string, string> = {
 
 export default function PostsPage() {
   const [tab, setTab] = useState<Status>("all");
+  const [abTestOpen, setAbTestOpen] = useState(false);
   const posts = usePostsStore((s) => s.posts);
   const loading = usePostsStore((s) => s.loading);
   const error = usePostsStore((s) => s.error);
@@ -48,6 +51,16 @@ export default function PostsPage() {
           >
             <RotateCw className={cn("size-3.5", loading && "animate-spin")} />
             Refresh
+          </Button>
+          <ExportButton type="posts" className="h-11 md:h-7" />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setAbTestOpen(true)}
+            className="gap-1.5 h-11 md:h-7"
+          >
+            <FlaskConical className="size-3.5" />
+            A/B Test
           </Button>
           <PostModal onSuccess={() => fetchPosts()} />
         </div>
@@ -115,6 +128,14 @@ export default function PostsPage() {
           ))}
         </div>
       )}
+      <AbTestModal
+        open={abTestOpen}
+        onOpenChange={setAbTestOpen}
+        onSuccess={() => {
+          fetchPosts();
+          setAbTestOpen(false);
+        }}
+      />
     </div>
   );
 }

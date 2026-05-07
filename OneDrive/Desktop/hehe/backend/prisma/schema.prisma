@@ -87,6 +87,7 @@ model Post {
   postSet   PostSet?         @relation(fields: [postSetId], references: [id])
   comments  Comment[]
   abTest    AbTest?          @relation(fields: [abTestId], references: [id])
+  publishLogs  PostPublishLog[]
   @@index([teamId])
   @@index([status])
   @@index([postSetId])
@@ -158,19 +159,25 @@ model PostSet {
   @@index([teamId])
 }
 model Comment {
-  id         String    @id @default(cuid())
-  postId     String
-  teamId     String
-  authorId   String
-  content    String    @db.Text
-  platform   String?
-  externalId String?
-  createdAt  DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  id              String    @id @default(cuid())
+  postId          String
+  teamId          String
+  authorId        String
+  content         String    @db.Text
+  platform        String?
+  externalId      String?
+  parentCommentId String?
+  mentions        Json      @default("[]")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  post            Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parentComment   Comment?   @relation("CommentReplies", fields: [parentCommentId], references: [id], onDelete: Cascade)
+  replies         Comment[]  @relation("CommentReplies")
+
   @@index([postId])
-  @@index([teamId])
+  @@index([parentCommentId])
 }
 model MediaAsset {
   id         String    @id @default(cuid())
@@ -180,54 +187,77 @@ model MediaAsset {
   mimeType   String?
   size       Int?
   metadata   Json?
+  tags       String[]  @default([])
   createdAt  DateTime  @default(now())
   team      Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
   @@index([teamId])
 }
 model AuditLog {
-  id        String   @id @default(cuid())
-  teamId    String
-  userId    String
-  action    String
-  entity    String?
-  entityId  String?
-  metadata  Json?
-  ipAddress String?
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  teamId     String
+  userId     String
+  action     String
+  entity     String?
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
   @@index([teamId])
   @@index([userId])
 }
 model ThirdPartyIntegration {
   id           String   @id @default(cuid())
-  teamId       String   @unique
+  teamId       String
+  identifier   String?
+  name         String?
+  username     String?
+  externalId   String?
   type         String
-  config       Json
+  apiKey       String?
+  config       Json     @default("{}")
   enabled      Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   team         Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  @@unique([teamId, identifier])
+  @@index([teamId])
 }
 model RssSource {
-  id        String    @id @default(cuid())
-  teamId    String
-  name      String
-  url       String
-  lastFetch DateTime?
-  createdAt DateTime  @default(now())
-  team      Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  teamId      String
+  name        String?
+  url         String
+  lastFetch   DateTime?
+  platforms   String[]  @default([])
+  autoPublish Boolean   @default(false)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  team        Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
   @@index([teamId])
 }
 model TrendItem {
-  id          String   @id @default(cuid())
-  teamId      String
-  keyword     String
-  platform    String
-  volume      Int?
-  sentiment   String?
-  lastChecked DateTime?
-  createdAt   DateTime @default(now())
-  team        Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  id              String    @id @default(cuid())
+  teamId          String
+  keyword         String
+  platform        String
+  volume          Int?
+  sentiment       String?
+  lastChecked     DateTime?
+  title           String?
+  summary         String?   @db.Text
+  url             String?
+  source          String?
+  relevanceScore  Float?
+  brandFitReason  String?   @db.Text
+  pillar          String?
+  status          String?
+  expiresAt       DateTime?
+  convertedPostId String?
+  createdAt       DateTime  @default(now())
+  team            Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
   @@index([teamId])
+  @@index([status])
+  @@index([relevanceScore])
 }
 model BrandProfile {
   id              String   @id @default(cuid())
@@ -371,4 +401,22 @@ model PlatformMetrics {
   @@index([postId])
   @@index([collectedAt])
   @@unique([postId, platform])
+}
+
+model PostPublishLog {
+  id              String    @id @default(cuid())
+  postId          String
+  platform       String
+  publishedAt    DateTime @default(now())
+  platformPostId String?
+  status         String   @default("pending")
+  error          String?  @db.Text
+  attemptNumber  Int      @default(1)
+  createdAt      DateTime @default(now())
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([platform])
+  @@index([publishedAt])
+  @@index([status])
 }

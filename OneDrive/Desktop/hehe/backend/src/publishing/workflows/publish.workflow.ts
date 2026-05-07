@@ -1,4 +1,4 @@
-import { proxyActivities, startChild } from '@temporalio/workflow';
+import { proxyActivities, startChild, sleep } from '@temporalio/workflow';
 import { CollectAnalyticsWorkflowInput, collectAnalyticsWorkflow } from '../../analytics/workflows/collect.workflow';
 import { PublishActivityInput, PublishActivityResult, PublishWorkflowInput } from '../types';
 
@@ -46,6 +46,16 @@ const activities = proxyActivities<PublishActivities>({
 const DEFAULT_TASK_QUEUE = 'posts-queue';
 
 export async function publishPostWorkflow(input: PublishWorkflowInput) {
+  if (input.scheduledAt) {
+    const now = new Date();
+    if (input.scheduledAt > now) {
+      const delayMs = input.scheduledAt.getTime() - now.getTime();
+      if (delayMs > 0) {
+        await sleep(delayMs);
+      }
+    }
+  }
+
   const context = await activities.preparePublishPost(input);
 
   const results = await Promise.all(

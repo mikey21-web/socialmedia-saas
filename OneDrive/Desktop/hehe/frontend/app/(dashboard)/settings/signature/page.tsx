@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { FormSkeleton } from "@/components/FormSkeleton";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -46,6 +47,16 @@ export default function SignatureSettingsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="p-4 md:p-6">
+        <Card className="max-w-2xl p-5">
+          <FormSkeleton fieldCount={2} />
+        </Card>
+      </div>
+    );
   }
 
   return (

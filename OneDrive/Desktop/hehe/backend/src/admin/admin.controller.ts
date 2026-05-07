@@ -1,10 +1,10 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   Patch,
+  Post,
   Query,
   Req,
   UseGuards,
@@ -15,17 +15,48 @@ import { AdminGuard } from './admin.guard';
 import { AdminService } from './admin.service';
 
 @UseGuards(JwtAuthGuard, AdminGuard)
-@Controller('admin')
+@Controller(['admin', 'api/admin'])
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
+
+  @Get('metrics')
+  getMetrics() {
+    return this.adminService.getMetrics();
+  }
+
+  @Get('teams')
+  getTeams(@Query('search') search?: string) {
+    return this.adminService.getTeams(search);
+  }
+
+  @Get('teams/:id')
+  getTeam(@Param('id') id: string) {
+    return this.adminService.getTeam(id);
+  }
+
+  @Post('teams/:id/suspend')
+  suspendTeam(@Param('id') id: string) {
+    return this.adminService.suspendTeam(id);
+  }
 
   @Get('users')
   getUsers(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('search') search?: string,
+    @Query('suspended') suspended?: string,
   ) {
-    return this.adminService.getUsers(Number(page) || 1, Number(limit) || 20, search);
+    return this.adminService.getUsers(
+      Number(page) || 1,
+      Number(limit) || 20,
+      search,
+      suspended === 'true' ? true : suspended === 'false' ? false : undefined,
+    );
+  }
+
+  @Post('users/:id/suspend')
+  suspendUser(@Param('id') id: string) {
+    return this.adminService.suspendUser(id);
   }
 
   @Get('users/:id')
@@ -51,7 +82,7 @@ export class AdminController {
     return this.adminService.getPosts(Number(page) || 1, Number(limit) || 20, status);
   }
 
-  @Delete('posts/:id')
+  @Post('posts/:id/delete')
   deletePost(@Param('id') id: string, @Req() req: { user: AuthenticatedRequestUser }) {
     return this.adminService.deletePost(id, req.user.userId);
   }

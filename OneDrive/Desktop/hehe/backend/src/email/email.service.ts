@@ -14,11 +14,22 @@ export class EmailService {
   private readonly logger = new Logger(EmailService.name);
 
   async sendWelcomeEmail(email: string, teamName: string) {
+    const appName = process.env.APP_NAME ?? 'Diyaa AI';
+    const dashboardUrl = process.env.FRONTEND_URL ?? process.env.APP_URL ?? 'http://localhost:3000/dashboard';
     return this.send({
       to: email,
-      subject: `Welcome to ${teamName}`,
-      text: `Welcome to ${teamName}. Your workspace is ready.`,
-      html: `<p>Welcome to <strong>${this.escapeHtml(teamName)}</strong>. Your workspace is ready.</p>`,
+      subject: `Welcome to ${appName} — let's get started`,
+      text: `Welcome to ${appName}. Your ${teamName} workspace is ready. Connect your first platform, create your first post, and invite your team from ${dashboardUrl}.`,
+      html: `<p>Welcome to <strong>${this.escapeHtml(appName)}</strong>. Your <strong>${this.escapeHtml(teamName)}</strong> workspace is ready.</p><ol><li>Connect your first platform.</li><li>Create your first post.</li><li>Invite your team when you are ready.</li></ol><p><a href="${this.escapeHtml(dashboardUrl)}">Open your dashboard</a></p>`,
+    });
+  }
+
+  async sendPaymentFailedEmail(email: string) {
+    return this.send({
+      to: email,
+      subject: 'Payment failed',
+      text: 'Your subscription payment failed. Please update your billing method to keep Pro features active.',
+      html: '<p>Your subscription payment failed. Please update your billing method to keep Pro features active.</p>',
     });
   }
 

@@ -40,6 +40,7 @@ export class ThirdPartyService {
       create: {
         teamId,
         identifier,
+        type: 'custom',
         apiKey: encryptedKey,
         name: data.name,
         username: data.username,
@@ -68,8 +69,8 @@ export class ThirdPartyService {
       where: { teamId_identifier: { teamId, identifier } },
     });
 
-    if (!integration) {
-      throw new NotFoundException(`ThirdParty '${identifier}' not connected for this team`);
+    if (!integration?.apiKey) {
+      throw new NotFoundException(`ThirdParty '${identifier}' has no API key for this team`);
     }
 
     return this.decrypt(integration.apiKey);

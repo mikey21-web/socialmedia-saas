@@ -47,6 +47,14 @@ export class AnalyticsController {
     return this.analyticsService.getSmartSuggestions(req.user.team_id);
   }
 
+  @Get('last-updated')
+  getLastMetricsUpdate(@TeamId() teamId: string | undefined) {
+    if (!teamId) {
+      throw new BadRequestException('Missing team context');
+    }
+    return this.analyticsService.getLastMetricsUpdate(teamId);
+  }
+
   @Get('summary')
   @SubscriptionFeatureLimit('analytics')
   getSummary(
@@ -82,5 +90,34 @@ export class AnalyticsController {
     res?.setHeader('Content-Type', 'text/csv');
     res?.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
     return result.csv;
+  }
+
+  @Get('platform-roi')
+  @SubscriptionFeatureLimit('analytics')
+  async getPlatformROI(
+    @TeamId() teamId: string | undefined,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.analyticsService.getPlatformROI(
+      teamId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  @Get('best-posting-times')
+  @SubscriptionFeatureLimit('analytics')
+  async getBestPostingTimes(@TeamId() teamId: string | undefined) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.analyticsService.getBestPostingTimes(teamId);
+  }
+
+  @Get('content-trends')
+  @SubscriptionFeatureLimit('analytics')
+  async getContentTrends(@TeamId() teamId: string | undefined) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.analyticsService.getContentPerformanceTrends(teamId);
   }
 }

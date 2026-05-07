@@ -16,6 +16,30 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Environment variables
+
+Create `.env.local` with:
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:3001
+```
+
+Google OAuth backend callback redirects to:
+
+```text
+/auth/google/callback
+```
+
+Set backend OAuth envs in `backend/.env`:
+
+```bash
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+JWT_EXPIRY=24h
+FRONTEND_URL=https://frontend-fawn-beta-69.vercel.app
+BACKEND_URL=https://agile-kindness-production-0efc.up.railway.app
+```
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
@@ -28,6 +52,13 @@ To learn more about Next.js, take a look at the following resources:
 - [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+
+## Tests
+
+```bash
+npm test
+npm run test:e2e
+```
 
 ## Deploy on Vercel
 

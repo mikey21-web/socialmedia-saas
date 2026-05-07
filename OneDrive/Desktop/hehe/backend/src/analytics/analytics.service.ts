@@ -247,8 +247,9 @@ export class AnalyticsService {
         engagements: acc.engagements + (metricMap.engagements ?? 0),
         likes: acc.likes + (metricMap.likes ?? 0),
         comments: acc.comments + (metricMap.comments ?? 0),
+        reach: acc.reach + (metricMap.reach ?? 0),
       }),
-      { impressions: 0, engagements: 0, likes: 0, comments: 0 },
+      { impressions: 0, engagements: 0, likes: 0, comments: 0, reach: 0 },
     );
 
     const engagementRate = total.impressions
@@ -376,6 +377,15 @@ export class AnalyticsService {
     };
   }
 
+  async getLastMetricsUpdate(teamId: string) {
+    const post = await this.prisma.post.findFirst({
+      where: { teamId, deletedAt: null, status: 'published' },
+      orderBy: { metricsUpdatedAt: 'desc' },
+      select: { metricsUpdatedAt: true },
+    });
+    return { lastUpdated: post?.metricsUpdatedAt ?? null };
+  }
+
   async getSmartSuggestions(teamId: string) {
     const since = new Date();
     since.setDate(since.getDate() - 30);
@@ -461,6 +471,10 @@ export class AnalyticsService {
     return { from: start, to: end };
   }
 
+  resolveDateRangePublic(from?: string, to?: string) {
+    return this.resolveDateRange(from, to);
+  }
+
   private parseEventType(eventType: string, fallbackPlatform: string) {
     const [first, second] = eventType.split(':');
     if (!second) {
@@ -496,5 +510,190 @@ export class AnalyticsService {
       return 'engagements';
     }
     return null;
+  }
+
+  async getPlatformROI(teamId: string, startDate?: Date, endDate?: Date) {
+    const range = this.resolveDateRange(startDate?.toISOString(), endDate?.toISOString());
+
+    const posts = await this.prisma.post.findMany({
+      where: {
+        teamId,
+        deletedAt: null,
+        status: 'published',
+      },
+      include: {
+        platforms: { select: { platform: true } },
+        analytics: {
+          where: {
+            collectedAt: { gte: range.from, lte: range.to },
+          },
+          select: { eventType: true, count: true },
+        },
+      },
+    });
+
+    const platformROI = new Map<string, { impressions: number; engagements: number; reach: number; likes: number; comments: number; shares: number; posts: number }>();
+
+    for (const post of posts) {
+      const platform = post.platforms[0]?.platform ?? 'unknown';
+      const entry = platformROI.get(platform) ?? { impressions: 0, engagements: 0, reach: 0, likes: 0, comments: 0, shares: 0, posts: 0 };
+
+      for (const event of post.analytics) {
+        const metric = this.normalizeMetric(event.eventType.split(':')[1] || event.eventType);
+        if (metric === 'impressions') entry.impressions += event.count;
+        if (metric === 'engagements') entry.engagements += event.count;
+        if (metric === 'reach') entry.reach += event.count;
+        if (metric === 'likes') entry.likes += event.count;
+        if (metric === 'comments') entry.comments += event.count;
+        if (metric === 'shares') entry.shares += event.count;
+      }
+
+      entry.posts += 1;
+      platformROI.set(platform, entry);
+    }
+
+    return Array.from(platformROI.entries()).map(([platform, data]) => ({
+      platform,
+      ...data,
+      engagementRate: data.impressions > 0 ? (data.engagements / data.impressions) * 100 : 0,
+    }));
+  }
+
+  async getBestPostingTimes(teamId: string) {
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+
+    const posts = await this.prisma.post.findMany({
+      where: {
+        teamId,
+        deletedAt: null,
+        status: 'published',
+        scheduledAt: { gte: since },
+      },
+      include: {
+        platforms: { select: { platform: true } },
+        analytics: { select: { eventType: true, count: true } },
+      },
+    });
+
+    type TimeSlot = { hour: number; dow: number; engagement: number; posts: number; platform: string };
+    const timeSlots = new Map<string, TimeSlot>();
+
+    for (const post of posts) {
+      if (!post.scheduledAt) continue;
+      const scheduledAt = new Date(post.scheduledAt);
+      const hour = scheduledAt.getHours();
+      const dow = scheduledAt.getDay();
+      const platform = post.platforms[0]?.platform ?? 'unknown';
+
+      let totalEngagement = 0;
+      for (const event of post.analytics) {
+        const metric = this.normalizeMetric(event.eventType.split(':')[1] || event.eventType);
+        if (metric === 'engagements' || metric === 'likes' || metric === 'comments' || metric === 'shares') {
+          totalEngagement += event.count;
+        }
+      }
+
+      const key = `${platform}-${hour}-${dow}`;
+      const existing = timeSlots.get(key) ?? { hour, dow, engagement: 0, posts: 0, platform };
+      existing.engagement += totalEngagement;
+      existing.posts += 1;
+      timeSlots.set(key, existing);
+    }
+
+    const bestTimes: Record<string, Array<{ day: string; hour: number; avgEngagement: number }>> = {};
+    const DOW_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    for (const [key, slot] of timeSlots.entries()) {
+      const platform = slot.platform;
+      if (!bestTimes[platform]) bestTimes[platform] = [];
+      bestTimes[platform].push({
+        day: DOW_NAMES[slot.dow],
+        hour: slot.hour,
+        avgEngagement: slot.posts > 0 ? slot.engagement / slot.posts : 0,
+      });
+    }
+
+    for (const platform of Object.keys(bestTimes)) {
+      bestTimes[platform] = bestTimes[platform]
+        .sort((a, b) => b.avgEngagement - a.avgEngagement)
+        .slice(0, 3);
+    }
+
+    return bestTimes;
+  }
+
+  async predictEngagement(caption: string, platform: string, brandProfile?: any): Promise<{ predictedEngagement: number; confidence: string; tips: string[] }> {
+    const tips: string[] = [];
+    let predicted = 50;
+
+    if (caption.length < 100) {
+      tips.push('Caption is short — consider adding more detail for better engagement.');
+      predicted -= 10;
+    } else if (caption.length > 200) {
+      tips.push('Long captions perform differently by platform. Test both lengths.');
+    }
+
+    if (caption.length > 280) {
+      tips.push('Caption exceeds 280 chars — not suitable for X/Twitter without truncating.');
+    }
+
+    const hashtags = (caption.match(/#\w+/g) ?? []).length;
+    if (hashtags === 0) {
+      tips.push('Consider adding 1-3 relevant hashtags to increase discoverability.');
+    } else if (hashtags > 5) {
+      tips.push('Too many hashtags (>5) can reduce engagement on some platforms.');
+    }
+
+    if (caption.includes('?') || caption.includes('CTA')) {
+      tips.push('Questions and CTAs tend to drive more comments and shares.');
+      predicted += 15;
+    }
+
+    predicted = Math.max(10, Math.min(predicted, 500));
+
+    let confidence = 'medium';
+    if (brandProfile?.voiceTone) confidence = 'high';
+
+    return { predictedEngagement: predicted, confidence, tips };
+  }
+
+  async getContentPerformanceTrends(teamId: string) {
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+
+    const posts = await this.prisma.post.findMany({
+      where: {
+        teamId,
+        deletedAt: null,
+        status: 'published',
+        scheduledAt: { gte: since },
+      },
+      include: {
+        platforms: { select: { platform: true } },
+        analytics: { select: { eventType: true, count: true } },
+      },
+    });
+
+    const trendingHashtags = new Map<string, number>();
+    const contentTypes = new Map<string, number>();
+
+    for (const post of posts) {
+      const hashtags = (post.content.match(/#\w+/g) ?? []).map((h: string) => h.toLowerCase());
+      for (const tag of hashtags) {
+        trendingHashtags.set(tag, (trendingHashtags.get(tag) ?? 0) + 1);
+      }
+
+      const type = post.content.length < 100 ? 'short' : post.content.length < 200 ? 'medium' : 'long';
+      contentTypes.set(type, (contentTypes.get(type) ?? 0) + 1);
+    }
+
+    return {
+      topHashtags: Array.from(trendingHashtags.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([tag, count]) => ({ tag, count })),
+      contentTypeBreakdown: Array.from(contentTypes.entries()).map(([type, count]) => ({ type, count })),
+    };
   }
 }

@@ -4,36 +4,35 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import StripeConstructor from 'stripe';
+import StripeConstructor = require('stripe');
 import { EmailService } from '../email/email.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing']);
 
-type StripeClient = {
-  customers: {
-    create: (input: Record<string, unknown>) => Promise<{ id: string }>;
-  };
-  checkout: {
-    sessions: {
-      create: (input: Record<string, unknown>) => Promise<{ url: string | null }>;
-      retrieve: (id: string, input: Record<string, unknown>) => Promise<{
-        metadata?: Record<string, string>;
-        customer?: string | { id?: string } | null;
-        subscription?: {
-          id?: string;
-          status?: string;
-          current_period_end?: number;
-          items?: { data?: Array<{ price?: { id?: string } }> };
-        } | null;
-      }>;
-    };
-  };
+type StripeCheckoutSession = {
+  metadata?: Record<string, string> | null;
+  customer?: string | { id: string } | null;
+  subscription?: string | { id?: string } | null;
+};
+
+type StripeSubscription = {
+  id: string;
+  metadata: Record<string, string>;
+  customer: string | { id: string };
+  status: string;
+  current_period_end?: number | null;
+  canceled_at?: number | null;
+  items: { data: Array<{ price: { id: string } }> };
+};
+
+type StripeInvoice = {
+  customer?: string | { id: string } | null;
 };
 
 @Injectable()
 export class SubscriptionsService {
-  private stripeClient?: StripeClient;
+  private stripeClient?: StripeConstructor.Stripe;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -44,9 +43,10 @@ export class SubscriptionsService {
     return ['free', 'pro'];
   }
 
-  async createCheckoutSession(teamId: string, priceId = process.env.STRIPE_PRICE_ID_PRO) {
+  async createCheckoutSession(teamId: string, userId?: string) {
+    const priceId = process.env.STRIPE_PRO_PRICE_ID ?? process.env.STRIPE_PRICE_ID_PRO;
     if (!priceId) {
-      throw new InternalServerErrorException('STRIPE_PRICE_ID_PRO is not configured');
+      throw new InternalServerErrorException('STRIPE_PRO_PRICE_ID is not configured');
     }
 
     const team = await this.prisma.team.findFirst({
@@ -64,6 +64,9 @@ export class SubscriptionsService {
     if (!team) {
       throw new NotFoundException('Team not found');
     }
+    if (userId && !team.members.some((member) => member.userId === userId)) {
+      throw new ForbiddenException('You do not have access to this team');
+    }
 
     const subscription = await this.ensureSubscription(teamId);
     const customerId = subscription.stripeCustomerId
@@ -74,8 +77,8 @@ export class SubscriptionsService {
       mode: 'subscription',
       customer: customerId,
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${baseUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/billing`,
+      success_url: `${baseUrl}/settings/billing?stripe=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/settings/billing?stripe=cancel`,
       metadata: { teamId },
       subscription_data: {
         metadata: { teamId },
@@ -94,15 +97,46 @@ export class SubscriptionsService {
       throw new InternalServerErrorException('Stripe did not return a checkout URL');
     }
 
-    return session.url;
+    return { url: session.url };
+  }
+
+  async createBillingPortalSession(teamId: string) {
+    const subscription = await this.ensureSubscription(teamId);
+    if (!subscription.stripeCustomerId) {
+      throw new NotFoundException('Stripe customer not found for this team');
+    }
+
+    const baseUrl = process.env.APP_URL ?? process.env.FRONTEND_URL ?? 'http://localhost:3000';
+    const session = await this.getStripe().billingPortal.sessions.create({
+      customer: subscription.stripeCustomerId,
+      return_url: `${baseUrl}/settings/billing`,
+    });
+
+    return { url: session.url };
   }
 
   async getSubscription(teamId: string) {
-    const subscription = await this.ensureSubscription(teamId);
+    return this.getSubscriptionStatus(teamId);
+  }
+
+  async getSubscriptionStatus(teamId: string) {
+    const [subscription, postsUsedThisMonth, platformsConnected, memberCount] = await Promise.all([
+      this.ensureSubscription(teamId),
+      this.getMonthlyScheduledPostCount(teamId),
+      this.prisma.platformCredential.count({ where: { teamId } }),
+      this.prisma.teamMember.count({ where: { teamId } }),
+    ]);
     return {
       plan: this.resolvePlan(subscription.plan, subscription.status) as 'free' | 'pro',
       status: subscription.status,
+      currentPeriodEnd: subscription.currentPeriodEnd,
       renewalDate: subscription.currentPeriodEnd,
+      seats: subscription.seats,
+      limits: {
+        posts: { current: postsUsedThisMonth, max: 10 },
+        platforms: { current: platformsConnected, max: 3 },
+        members: { current: memberCount, max: 2 },
+      },
     };
   }
 
@@ -116,7 +150,9 @@ export class SubscriptionsService {
       throw new ForbiddenException('Checkout session does not belong to this team');
     }
 
-    const stripeSubscription = session.subscription;
+    const stripeSubscription = typeof session.subscription === 'object' && session.subscription !== null
+      ? session.subscription as unknown as StripeSubscription
+      : null;
     const customerId = typeof session.customer === 'string'
       ? session.customer
       : session.customer?.id;
@@ -187,9 +223,29 @@ export class SubscriptionsService {
   }
 
   async handlePaymentFailed(customerId: string) {
-    return this.updateByCustomer(customerId, {
+    const result = await this.updateByCustomer(customerId, {
       status: 'past_due',
     });
+
+    const subscription = await this.prisma.subscription.findFirst({
+      where: { stripeCustomerId: customerId },
+      include: {
+        team: {
+          include: {
+            members: {
+              include: { user: true },
+              orderBy: { id: 'asc' },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    const email = subscription?.team.members[0]?.user.email;
+    if (email) {
+      await this.emailService.sendPaymentFailedEmail(email);
+    }
+    return result;
   }
 
   async cancelByStripeSubscription(stripeSubscriptionId: string, customerId?: string) {
@@ -220,6 +276,20 @@ export class SubscriptionsService {
         teamId,
         deletedAt: null,
         createdAt: { gte: dayStart },
+      },
+    });
+  }
+
+  async getMonthlyScheduledPostCount(teamId: string) {
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    return this.prisma.post.count({
+      where: {
+        teamId,
+        deletedAt: null,
+        status: { in: ['scheduled', 'published', 'partial', 'publishing'] },
+        createdAt: { gte: monthStart },
       },
     });
   }
@@ -279,7 +349,103 @@ export class SubscriptionsService {
     return customer.id;
   }
 
-  private getStripe(): StripeClient {
+  async handleWebhook(rawBody: Buffer, signature: string) {
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      throw new InternalServerErrorException('STRIPE_WEBHOOK_SECRET is not configured');
+    }
+
+    const event = this.getStripe().webhooks.constructEvent(rawBody, signature, webhookSecret);
+
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object as StripeCheckoutSession;
+      await this.handleCheckoutCompleted(session);
+    }
+
+    if (event.type === 'customer.subscription.updated') {
+      const subscription = event.data.object as StripeSubscription;
+      await this.updateSubscriptionFromStripe(subscription);
+    }
+
+    if (event.type === 'customer.subscription.deleted') {
+      const subscription = event.data.object as StripeSubscription;
+      await this.cancelByStripeSubscription(
+        subscription.id,
+        typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id,
+      );
+    }
+
+    if (event.type === 'invoice.payment_failed') {
+      const invoice = event.data.object as StripeInvoice;
+      const customerId = typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id;
+      if (customerId) {
+        await this.handlePaymentFailed(customerId);
+      }
+    }
+
+    return { received: true };
+  }
+
+  private async handleCheckoutCompleted(session: StripeCheckoutSession) {
+    const teamId = session.metadata?.teamId;
+    if (!teamId) return;
+
+    const subscriptionId = typeof session.subscription === 'string'
+      ? session.subscription
+      : session.subscription?.id;
+    if (!subscriptionId) return;
+
+    const subscription = await this.getStripe().subscriptions.retrieve(subscriptionId) as StripeSubscription;
+    await this.updateSubscriptionFromStripe(subscription, teamId);
+  }
+
+  private async updateSubscriptionFromStripe(subscription: StripeSubscription, fallbackTeamId?: string) {
+    const teamId = subscription.metadata.teamId ?? fallbackTeamId;
+    const customerId = typeof subscription.customer === 'string'
+      ? subscription.customer
+      : subscription.customer.id;
+    const priceId = subscription.items.data[0]?.price.id;
+    const periodEnd = subscription.current_period_end
+      ? new Date(subscription.current_period_end * 1000)
+      : null;
+    const plan = ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status) ? 'pro' : 'free';
+
+    if (teamId) {
+      await this.prisma.subscription.upsert({
+        where: { teamId },
+        create: {
+          teamId,
+          plan,
+          status: subscription.status,
+          stripeId: subscription.id,
+          stripeCustomerId: customerId,
+          stripePriceId: priceId,
+          currentPeriodEnd: periodEnd,
+          canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null,
+        },
+        update: {
+          plan,
+          status: subscription.status,
+          stripeId: subscription.id,
+          stripeCustomerId: customerId,
+          stripePriceId: priceId,
+          currentPeriodEnd: periodEnd,
+          canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null,
+        },
+      });
+      return;
+    }
+
+    await this.updateByCustomer(customerId, {
+      plan,
+      status: subscription.status,
+      stripePriceId: priceId,
+      currentPeriodEnd: periodEnd,
+      canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000) : null,
+    });
+  }
+
+  private getStripe(): StripeConstructor.Stripe {
     if (this.stripeClient) {
       return this.stripeClient;
     }
@@ -289,7 +455,7 @@ export class SubscriptionsService {
       throw new InternalServerErrorException('STRIPE_SECRET_KEY is not configured');
     }
 
-    this.stripeClient = new StripeConstructor(secretKey) as unknown as StripeClient;
+    this.stripeClient = new StripeConstructor(secretKey);
     return this.stripeClient;
   }
 

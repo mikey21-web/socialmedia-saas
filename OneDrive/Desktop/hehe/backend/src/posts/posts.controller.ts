@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -57,12 +58,19 @@ export class PostsController {
     return this.postsService.getPostById(req.user, postId);
   }
 
-  @Patch(':id')
+@Patch(':id')
   updatePost(
     @Req() req: { user: AuthenticatedRequestUser },
     @Param('id') postId: string,
     @Body() dto: UpdatePostDto,
   ) {
+    if (dto.scheduledAt) {
+      const scheduledDate = new Date(dto.scheduledAt);
+      const now = new Date();
+      if (scheduledDate <= now) {
+        throw new BadRequestException('scheduledAt must be a future date when rescheduling a post');
+      }
+    }
     return this.postsService.updatePost(req.user, postId, dto);
   }
 

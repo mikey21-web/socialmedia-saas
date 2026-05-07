@@ -3,12 +3,21 @@
 import { create } from "zustand";
 import { api } from "@/lib/api";
 
+export interface Author {
+  id: string;
+  name: string | null;
+  email: string;
+}
+
 export interface CommentItem {
   id: string;
   postId: string;
   authorId: string;
   content: string;
+  parentCommentId: string | null;
   createdAt: string;
+  author: Author;
+  replies: CommentItem[];
 }
 
 interface CommentsState {
@@ -16,7 +25,7 @@ interface CommentsState {
   loading: boolean;
   error: string | null;
   fetchComments: (postId: string) => Promise<void>;
-  addComment: (postId: string, content: string) => Promise<void>;
+  addComment: (postId: string, content: string, parentCommentId?: string) => Promise<void>;
   deleteComment: (postId: string, commentId: string) => Promise<void>;
 }
 
@@ -38,8 +47,8 @@ export const useCommentsStore = create<CommentsState>((set, get) => ({
     }
   },
 
-  addComment: async (postId: string, content: string) => {
-    await api.post(`/posts/${postId}/comments`, { content });
+  addComment: async (postId: string, content: string, parentCommentId?: string) => {
+    await api.post(`/posts/${postId}/comments`, { content, parentCommentId });
     await get().fetchComments(postId);
   },
 

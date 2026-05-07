@@ -17,6 +17,10 @@ export class TeamsService {
     return this.subscriptionsService.getDailyPostCount(teamId);
   }
 
+  getMonthlyScheduledPostCount(teamId: string) {
+    return this.subscriptionsService.getMonthlyScheduledPostCount(teamId);
+  }
+
   getMonthlyAnalyticsEventCount(teamId: string) {
     return this.subscriptionsService.getMonthlyAnalyticsEventCount(teamId);
   }
@@ -44,8 +48,13 @@ export class TeamsService {
       this.subscriptionsService.getTeamPlan(teamId),
     ]);
 
-    if (plan === 'free' && memberCount >= 1) {
-      throw new ForbiddenException('Upgrade to Pro to invite team members');
+    if (plan === 'free' && memberCount >= 2) {
+      throw new ForbiddenException({
+        code: 'UPGRADE_REQUIRED',
+        limit: 'members',
+        current: memberCount,
+        max: 2,
+      });
     }
 
     return this.prisma.teamMember.create({
@@ -55,5 +64,13 @@ export class TeamsService {
         role,
       },
     });
+  }
+
+  getPlatformCredentialCount(teamId: string) {
+    return this.prisma.platformCredential.count({ where: { teamId } });
+  }
+
+  getTeamMemberCount(teamId: string) {
+    return this.prisma.teamMember.count({ where: { teamId } });
   }
 }

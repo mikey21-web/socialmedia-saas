@@ -136,12 +136,27 @@ export class PostsService {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
 
+    const whereClause: Record<string, unknown> = {
+      teamId,
+      deletedAt: null,
+    };
+
+    if (query.status) {
+      whereClause.status = query.status;
+    }
+
+    if (query.startDate || query.endDate) {
+      whereClause.scheduledAt = {};
+      if (query.startDate) {
+        (whereClause.scheduledAt as Record<string, Date>).gte = new Date(query.startDate);
+      }
+      if (query.endDate) {
+        (whereClause.scheduledAt as Record<string, Date>).lte = new Date(query.endDate);
+      }
+    }
+
     const posts = await this.prisma.post.findMany({
-      where: {
-        teamId,
-        deletedAt: null,
-        ...(query.status ? { status: query.status } : {}),
-      },
+      where: whereClause,
       include: {
         platforms: {
           select: {

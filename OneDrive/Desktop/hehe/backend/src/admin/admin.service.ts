@@ -5,11 +5,81 @@ import { PrismaService } from '../prisma/prisma.service';
 export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getUsers(page = 1, limit = 20, search?: string) {
+  async getMetrics() {
+    const weekStart = new Date();
+    weekStart.setDate(weekStart.getDate() - 7);
+    const [totalTeams, totalUsers, postsThisWeek, activeSubscriptions] = await Promise.all([
+      this.prisma.team.count({ where: { deletedAt: null } }),
+      this.prisma.user.count({ where: { deletedAt: null } }),
+      this.prisma.post.count({ where: { createdAt: { gte: weekStart }, deletedAt: null } }),
+      this.prisma.subscription.count({ where: { plan: 'pro', status: { in: ['active', 'trialing'] } } }),
+    ]);
+
+    return { totalTeams, totalUsers, postsThisWeek, activeSubscriptions };
+  }
+
+  async getTeams(search?: string) {
+    return this.prisma.team.findMany({
+      where: {
+        deletedAt: null,
+        ...(search ? { name: { contains: search, mode: 'insensitive' as const } } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        createdAt: true,
+        subscription: { select: { plan: true, status: true } },
+        _count: { select: { members: true, posts: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getTeam(id: string) {
+    const team = await this.prisma.team.findUnique({
+      where: { id },
+      include: {
+        subscription: true,
+        members: {
+          include: { user: { select: { id: true, email: true, name: true, role: true } } },
+          orderBy: { id: 'asc' },
+        },
+        posts: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+          select: { id: true, title: true, status: true, createdAt: true, scheduledAt: true },
+        },
+        _count: { select: { posts: true, members: true } },
+      },
+    });
+    if (!team) throw new NotFoundException('Team not found');
+    return team;
+  }
+
+  async suspendTeam(id: string) {
+    return this.prisma.team.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+      select: { id: true, deletedAt: true },
+    });
+  }
+
+  async suspendUser(id: string) {
+    return this.prisma.user.update({
+      where: { id },
+      data: { suspended: true, suspendedAt: new Date() },
+      select: { id: true, email: true, suspended: true, suspendedAt: true },
+    });
+  }
+
+  async getUsers(page = 1, limit = 20, search?: string, suspended?: boolean) {
     const skip = (page - 1) * limit;
-    const where = search
-      ? { email: { contains: search, mode: 'insensitive' as const }, deletedAt: null }
-      : { deletedAt: null };
+    const where = {
+      deletedAt: null,
+      ...(search ? { email: { contains: search, mode: 'insensitive' as const } } : {}),
+      ...(suspended === undefined ? {} : { suspended }),
+    };
 
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
@@ -77,12 +147,18 @@ export class AdminService {
       select: { id: true, email: true, role: true, suspended: true },
     });
 
+    const teamMember = await this.prisma.teamMember.findFirst({
+      where: { userId: adminId },
+      select: { teamId: true },
+    });
+
     await this.prisma.auditLog.create({
       data: {
-        adminId,
+        teamId: teamMember?.teamId ?? '',
+        userId: adminId,
         action: data.suspended ? 'suspend_user' : data.role ? 'change_role' : 'update_user',
-        targetId: id,
-        targetType: 'User',
+        entityId: id,
+        entity: 'User',
         metadata: data,
       },
     });
@@ -129,12 +205,18 @@ export class AdminService {
       data: { deletedAt: new Date() },
     });
 
+    const teamMember = await this.prisma.teamMember.findFirst({
+      where: { userId: adminId },
+      select: { teamId: true },
+    });
+
     await this.prisma.auditLog.create({
       data: {
-        adminId,
+        teamId: teamMember?.teamId ?? post.teamId,
+        userId: adminId,
         action: 'delete_post',
-        targetId: postId,
-        targetType: 'Post',
+        entityId: postId,
+        entity: 'Post',
       },
     });
   }
@@ -175,7 +257,6 @@ export class AdminService {
 
     const [logs, total] = await Promise.all([
       this.prisma.auditLog.findMany({
-        include: { admin: { select: { email: true } } },
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
