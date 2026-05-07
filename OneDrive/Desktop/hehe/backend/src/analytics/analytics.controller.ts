@@ -1,16 +1,21 @@
-import { BadRequestException, Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Param, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { TeamId } from '../common/decorators/team.decorator';
 import { SubscriptionFeatureLimit } from '../common/decorators/subscription-feature.decorator';
 import { SubscriptionGuard } from '../common/guards/subscription.guard';
 import { AuthenticatedRequestUser } from '../common/interfaces/authenticated-request-user.interface';
 import { AnalyticsService } from './analytics.service';
+import { AnalyticsExportService } from './export.service';
 
 @UseGuards(JwtAuthGuard, SubscriptionGuard)
 @Controller('analytics')
 export class AnalyticsController {
-  constructor(private readonly analyticsService: AnalyticsService) {}
+  constructor(
+    private readonly analyticsService: AnalyticsService,
+    private readonly analyticsExportService: AnalyticsExportService,
+  ) {}
 
   @Get('posts/:id')
   @SubscriptionFeatureLimit('analytics')
@@ -59,5 +64,23 @@ export class AnalyticsController {
       from,
       to,
     });
+  }
+
+  @Get('export')
+  @SubscriptionFeatureLimit('analytics')
+  async exportAnalytics(
+    @TeamId() teamId: string | undefined,
+    @Query('type') type: 'posts' | 'trends',
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Res({ passthrough: true }) res?: Response,
+  ) {
+    if (!teamId) {
+      throw new BadRequestException('Missing team context');
+    }
+    const result = await this.analyticsExportService.export(teamId, type, startDate, endDate);
+    res?.setHeader('Content-Type', 'text/csv');
+    res?.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+    return result.csv;
   }
 }

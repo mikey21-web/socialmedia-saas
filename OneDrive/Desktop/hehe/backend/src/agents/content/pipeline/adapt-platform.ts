@@ -7,7 +7,10 @@ import { buildTwitterPrompt } from '../prompts/adapt-twitter.prompt';
 import { buildFacebookPrompt } from '../prompts/adapt-facebook.prompt';
 import { buildTiktokPrompt } from '../prompts/adapt-tiktok.prompt';
 
-const promptBuilders: Record<string, (angle: Angle, brand: BrandContext) => string> = {
+const SUPPORTED_PLATFORMS = ['twitter', 'instagram', 'linkedin', 'facebook', 'tiktok'] as const;
+type SupportedPlatform = (typeof SUPPORTED_PLATFORMS)[number];
+
+const promptBuilders: Record<SupportedPlatform, (angle: Angle, brand: BrandContext) => string> = {
   instagram: buildInstagramPrompt,
   linkedin: buildLinkedinPrompt,
   twitter: buildTwitterPrompt,
@@ -21,7 +24,7 @@ export async function adaptForPlatform(
   brand: BrandContext,
   llm: LLMClient,
 ): Promise<PlatformDraft> {
-  const builder = promptBuilders[platform];
+  const builder = promptBuilders[platform as SupportedPlatform];
   if (!builder) {
     throw new Error(`No prompt builder for platform: ${platform}`);
   }
@@ -41,8 +44,12 @@ export async function adaptForAllPlatforms(
   brand: BrandContext,
   llm: LLMClient,
 ): Promise<PlatformDraft[]> {
+  const platformSet = platforms.length > 0
+    ? platforms
+    : SUPPORTED_PLATFORMS;
+
   const results = await Promise.all(
-    platforms.map((p) => adaptForPlatform(p, angle, brand, llm)),
+    platformSet.map((p) => adaptForPlatform(p, angle, brand, llm)),
   );
   return results;
 }

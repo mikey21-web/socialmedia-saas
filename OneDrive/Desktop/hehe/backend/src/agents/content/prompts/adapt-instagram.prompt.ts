@@ -26,10 +26,12 @@ Pillar: ${angle.pillar}
 Angle: ${angle.angle}
 
 INSTAGRAM RULES:
+- STRICT: fullCaption MUST be 200 characters or fewer
 - Hook in first line that stops the scroll
-- 80-150 words ideal
-- 5-8 hashtags at the end (mix niche + broad)
+- 150-200 chars total
+- 3-5 hashtags at the end (mix niche + broad)
 - Strong CTA last line
+- Casual tone
 - Match emoji usage exactly: ${brand.voice.emojiUsage}
 
 OUTPUT JSON ONLY:
@@ -37,7 +39,7 @@ OUTPUT JSON ONLY:
   "hook": "first line",
   "body": "main caption",
   "cta": "call to action",
-  "hashtags": ["tag1", "tag2"],
-  "fullCaption": "complete assembled caption"
+  "hashtags": ["tag1", "tag2", "tag3"],
+  "fullCaption": "complete assembled caption (200 chars max)"
 }`;
 }

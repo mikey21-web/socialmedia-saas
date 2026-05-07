@@ -11,6 +11,7 @@ BRAND VOICE:
 - Always use words like: ${brand.voice.alwaysWords.join(', ') || 'none specified'}
 - NEVER use these words: ${brand.voice.neverWords.join(', ') || 'none specified'}
 - Emoji usage: ${brand.voice.emojiUsage}
+- Hashtag style: ${brand.voice.hashtagStyle}
 
 AUDIENCE:
 - Age: ${brand.audience.age}
@@ -25,20 +26,21 @@ Pillar: ${angle.pillar}
 Angle: ${angle.angle}
 
 LINKEDIN RULES:
+- STRICT: fullCaption MUST be 300 characters or fewer
 - Start with a bold hook line (makes people click "see more")
 - Personal or thought-leadership angle
-- 100-200 words
-- NO hashtag spam (max 3 hashtags)
+- Professional yet human tone — no emojis
+- 1 hashtag max
 - End with a question or discussion prompt for engagement
 - Use line breaks for readability
-- Professional yet human tone
+- 200-300 chars total
 
 OUTPUT JSON ONLY:
 {
   "hook": "first line",
   "body": "main post content",
   "cta": "engagement question or call to action",
-  "hashtags": ["tag1", "tag2"],
-  "fullCaption": "complete assembled post"
+  "hashtags": ["tag1"],
+  "fullCaption": "complete assembled post (300 chars max)"
 }`;
 }

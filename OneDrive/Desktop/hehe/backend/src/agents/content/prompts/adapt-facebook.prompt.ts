@@ -11,6 +11,7 @@ BRAND VOICE:
 - Always use words like: ${brand.voice.alwaysWords.join(', ') || 'none specified'}
 - NEVER use these words: ${brand.voice.neverWords.join(', ') || 'none specified'}
 - Emoji usage: ${brand.voice.emojiUsage}
+- Hashtag style: ${brand.voice.hashtagStyle}
 
 AUDIENCE:
 - Age: ${brand.audience.age}
@@ -25,11 +26,13 @@ Pillar: ${angle.pillar}
 Angle: ${angle.angle}
 
 FACEBOOK RULES:
+- STRICT: fullCaption MUST be 250 characters or fewer
+- Friendly, shareable hook that stops the scroll
 - Narrative/storytelling approach works best
-- 80-200 words
+- 150-250 chars total
 - Clear CTA (comment, share, click link)
 - Use line breaks for scannability
-- 2-4 hashtags
+- 1-3 hashtags
 - Match emoji usage: ${brand.voice.emojiUsage}
 
 OUTPUT JSON ONLY:
@@ -38,6 +41,6 @@ OUTPUT JSON ONLY:
   "body": "main story/narrative",
   "cta": "call to action",
   "hashtags": ["tag1", "tag2"],
-  "fullCaption": "complete assembled post"
+  "fullCaption": "complete assembled post (250 chars max)"
 }`;
 }

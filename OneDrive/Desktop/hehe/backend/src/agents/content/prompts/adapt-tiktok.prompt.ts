@@ -13,6 +13,7 @@ BRAND VOICE:
 AUDIENCE:
 - Age: ${brand.audience.age}
 - Interests: ${brand.audience.interests.join(', ')}
+- Pain points: ${brand.audience.painPoints.join(', ')}
 
 EXAMPLES OF OUR VOICE (match this energy):
 ${brand.voiceExamples.slice(0, 5).map((e, i) => `${i + 1}. "${e.content}"`).join('\n') || 'No examples provided yet.'}
@@ -22,12 +23,13 @@ Pillar: ${angle.pillar}
 Angle: ${angle.angle}
 
 TIKTOK RULES:
+- STRICT: fullCaption MUST be 150 characters or fewer
 - Very short caption (20-60 words max)
 - Gen-Z/casual energy (unless brand says otherwise)
 - Trending sound suggestion if relevant
-- 3-5 hashtags (mix trending + niche)
+- 2-3 hashtags
 - Hook must be instant — no warm-up
-- Emoji heavy unless brand says otherwise
+- Match emoji usage: ${brand.voice.emojiUsage}
 
 OUTPUT JSON ONLY:
 {
@@ -35,6 +37,6 @@ OUTPUT JSON ONLY:
   "body": "rest of caption",
   "cta": "",
   "hashtags": ["tag1", "tag2"],
-  "fullCaption": "complete assembled caption"
+  "fullCaption": "complete assembled caption (150 chars max)"
 }`;
 }

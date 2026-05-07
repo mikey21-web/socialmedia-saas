@@ -23,7 +23,10 @@ import { WebhooksModule } from './webhooks/webhooks.module';
 import { ThirdPartyModule } from './thirdparty/thirdparty.module';
 import { RssModule } from './rss/rss.module';
 import { AiModule } from './ai/ai.module';
+import { AgentsModule } from './agents/agents.module';
 import { AdminModule } from './admin/admin.module';
+import { BrandModule } from './brand/brand.module';
+import { InboxModule } from './inbox/inbox.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -60,6 +63,9 @@ import { HealthController } from './health.controller';
     RssModule,
     AiModule,
     AdminModule,
+    BrandModule,
+    AgentsModule,
+    InboxModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }, RedisProvider],

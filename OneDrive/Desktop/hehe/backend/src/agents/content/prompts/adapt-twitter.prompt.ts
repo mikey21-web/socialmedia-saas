@@ -15,6 +15,7 @@ BRAND VOICE:
 AUDIENCE:
 - Age: ${brand.audience.age}
 - Interests: ${brand.audience.interests.join(', ')}
+- Pain points: ${brand.audience.painPoints.join(', ')}
 
 EXAMPLES OF OUR VOICE (match this energy):
 ${brand.voiceExamples.slice(0, 5).map((e, i) => `${i + 1}. "${e.content}"`).join('\n') || 'No examples provided yet.'}
@@ -24,12 +25,12 @@ Pillar: ${angle.pillar}
 Angle: ${angle.angle}
 
 TWITTER/X RULES:
-- Max 280 characters for main tweet
-- Punchy, high-impact language
-- No fluff, every word earns its place
-- Optional: suggest a thread (2-3 follow-up tweets)
+- STRICT: fullCaption MUST be 280 characters or fewer
+- Conversational, punchy, high-impact language
+- No fluff — every word earns its place
 - 1-2 hashtags max
 - Match emoji usage: ${brand.voice.emojiUsage}
+- hook is the tweet itself (under 280 chars), body and cta should be empty or very short
 
 OUTPUT JSON ONLY:
 {
@@ -37,6 +38,6 @@ OUTPUT JSON ONLY:
   "body": "",
   "cta": "",
   "hashtags": ["tag1"],
-  "fullCaption": "the complete tweet with hashtags"
+  "fullCaption": "the complete tweet with hashtags (280 chars max)"
 }`;
 }
