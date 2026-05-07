@@ -12,13 +12,19 @@ model User {
   email     String   @unique
   name      String?
   password  String
+  refreshTokenHash String?
+  role      String   @default("user")
+  suspended Boolean  @default(false)
+  suspendedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   deletedAt DateTime?
 
-  teams TeamMember[]
+  teams     TeamMember[]
+  auditLogs AuditLog[]
 
   @@index([email])
+  @@index([role])
 }
 
 model Team {
@@ -233,4 +239,20 @@ model RssSource {
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@index([teamId])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  adminId    String
+  action     String
+  targetId   String
+  targetType String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  admin User @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@index([targetId])
+  @@index([action])
 }
