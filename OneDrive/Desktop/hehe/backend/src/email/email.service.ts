@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import sgMail from '@sendgrid/mail';
 import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
 type EmailMessage = {
   to: string;
@@ -59,6 +60,18 @@ export class EmailService {
 
   private async send(message: EmailMessage) {
     const service = process.env.EMAIL_SERVICE;
+    if (service === 'resend' || process.env.RESEND_API_KEY) {
+      const apiKey = process.env.RESEND_API_KEY;
+      const from = process.env.EMAIL_FROM ?? process.env.RESEND_FROM_EMAIL;
+      if (!apiKey || !from) {
+        this.logger.warn('Resend email skipped because credentials are incomplete');
+        return { sent: false };
+      }
+      const resend = new Resend(apiKey);
+      await resend.emails.send({ ...message, from });
+      return { sent: true };
+    }
+
     if (service === 'sendgrid') {
       const apiKey = process.env.SENDGRID_API_KEY;
       const from = process.env.EMAIL_FROM ?? process.env.SENDGRID_FROM_EMAIL;

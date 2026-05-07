@@ -23,7 +23,9 @@ export default function AdminUsersPage() {
   }
 
   useEffect(() => {
-    void load();
+    queueMicrotask(() => {
+      void load();
+    });
   }, []);
 
   async function suspend(id: string) {

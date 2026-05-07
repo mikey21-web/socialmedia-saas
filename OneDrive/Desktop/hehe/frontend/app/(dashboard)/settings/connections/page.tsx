@@ -36,7 +36,9 @@ export default function ConnectionsPage() {
   }
 
   useEffect(() => {
-    void load();
+    queueMicrotask(() => {
+      void load();
+    });
   }, []);
 
   async function disconnect(id: string) {
@@ -45,7 +47,7 @@ export default function ConnectionsPage() {
   }
 
   function connect(platform: string) {
-    window.location.href = `${api.defaults.baseURL}/api/platforms/connect/${platform}`;
+    window.location.assign(`${api.defaults.baseURL}/api/platforms/connect/${platform}`);
   }
 
   return (

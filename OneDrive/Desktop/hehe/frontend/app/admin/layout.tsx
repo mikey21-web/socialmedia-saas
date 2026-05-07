@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect } from "react";
 import { useAuthStore } from "@/store/auth";
 
 function isAdminToken(token: string | null) {
@@ -18,15 +18,13 @@ function isAdminToken(token: string | null) {
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const token = useAuthStore((state) => state.token);
-  const [ready, setReady] = useState(false);
+  const ready = isAdminToken(token);
 
   useEffect(() => {
-    if (!isAdminToken(token)) {
+    if (!ready) {
       router.replace("/");
-      return;
     }
-    setReady(true);
-  }, [router, token]);
+  }, [ready, router]);
 
   if (!ready) return null;
 
