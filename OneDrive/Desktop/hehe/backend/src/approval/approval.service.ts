@@ -3,8 +3,8 @@ import { PrismaService } from "../prisma/prisma.service";
 
 interface BatchResult {
   approved: number;
-  rejected: number;
   failed: number;
+  skipped: number;
   errors: Array<{ postId: string; message: string }>;
   warnings: Array<{ postId: string; message: string }>;
 }
@@ -104,107 +104,166 @@ export class ApprovalService {
     action: "approve" | "reject",
     reason?: string,
   ): Promise<BatchResult> {
+    if (action === "approve") {
+      return this.approveBatch("", postIds);
+    }
+    return this.rejectBatch("", postIds, reason);
+  }
+
+  async approveBatch(
+    teamId: string,
+    postIds: string[],
+    scheduledAt?: string,
+  ): Promise<BatchResult> {
+    const errors: Array<{ postId: string; message: string }> = [];
+    const warnings: Array<{ postId: string; message: string }> = [];
+    let approved = 0;
+    let failed = 0;
+    let skipped = 0;
+
     if (!postIds || postIds.length === 0) {
       throw new BadRequestException("At least one post ID is required");
     }
 
-    const errors: Array<{ postId: string; message: string }> = [];
-    const warnings: Array<{ postId: string; message: string }> = [];
-    let approved = 0;
-    let rejected = 0;
-    let failed = 0;
-
-    // All-or-nothing validation: check if all postIds are valid UUIDs
     const invalidIds = postIds.filter((id) => !this.isValidUuid(id));
     if (invalidIds.length > 0) {
-      throw new BadRequestException(
-        `Invalid post IDs: ${invalidIds.join(", ")}`,
-      );
+      throw new BadRequestException(`Invalid post IDs: ${invalidIds.join(", ")}`);
     }
 
-    // Fetch all posts in one query
+    const whereClause: any = {
+      id: { in: postIds },
+      deletedAt: null,
+    };
+    if (teamId) {
+      whereClause.teamId = teamId;
+    }
+
     const posts = await this.prisma.post.findMany({
-      where: {
-        id: { in: postIds },
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        status: true,
-      },
+      where: whereClause,
+      select: { id: true, status: true, teamId: true },
     });
 
-    // Check for non-existent posts
     const foundIds = new Set(posts.map((p) => p.id));
     for (const postId of postIds) {
       if (!foundIds.has(postId)) {
-        errors.push({
-          postId,
-          message: "Post not found or has been deleted",
-        });
+        errors.push({ postId, message: "Post not found or has been deleted" });
       }
     }
 
-    // Process each post
     await this.prisma.$transaction(async (tx) => {
       for (const postId of postIds) {
         const post = posts.find((p) => p.id === postId);
-
         if (!post) {
           failed++;
           continue;
         }
 
-
-        // Skip if already in target state
-        if (post.status === action) {
-          warnings.push({
-            postId,
-            message: `Post is already ${action}d`,
-          });
-          if (action === "approve") approved++;
-          else rejected++;
+        if (teamId && post.teamId !== teamId) {
+          errors.push({ postId, message: "Post does not belong to this team" });
+          failed++;
           continue;
         }
 
-        // Skip if already published or scheduled
-        if (post.status === "published" || post.status === "scheduled") {
-          warnings.push({
-            postId,
-            message: `Cannot ${action} a ${post.status} post`,
+        if (post.status !== "awaiting_approval") {
+          warnings.push({ postId, message: `Post is not awaiting approval (current: ${post.status})` });
+          skipped++;
+          continue;
+        }
+
+        try {
+          const newStatus = scheduledAt ? "scheduled" : "approved";
+          await tx.post.update({
+            where: { id: postId },
+            data: {
+              status: newStatus,
+              ...(scheduledAt ? { scheduledAt: new Date(scheduledAt) } : {}),
+            },
           });
+          approved++;
+        } catch {
           failed++;
+          errors.push({ postId, message: "Failed to approve post" });
+        }
+      }
+    });
+
+    return { approved, failed, skipped, errors, warnings };
+  }
+
+  async rejectBatch(
+    teamId: string,
+    postIds: string[],
+    reason?: string,
+  ): Promise<BatchResult> {
+    const errors: Array<{ postId: string; message: string }> = [];
+    const warnings: Array<{ postId: string; message: string }> = [];
+    let rejected = 0;
+    let failed = 0;
+    let skipped = 0;
+
+    if (!postIds || postIds.length === 0) {
+      throw new BadRequestException("At least one post ID is required");
+    }
+
+    const invalidIds = postIds.filter((id) => !this.isValidUuid(id));
+    if (invalidIds.length > 0) {
+      throw new BadRequestException(`Invalid post IDs: ${invalidIds.join(", ")}`);
+    }
+
+    const whereClause: any = {
+      id: { in: postIds },
+      deletedAt: null,
+    };
+    if (teamId) {
+      whereClause.teamId = teamId;
+    }
+
+    const posts = await this.prisma.post.findMany({
+      where: whereClause,
+      select: { id: true, status: true, teamId: true },
+    });
+
+    const foundIds = new Set(posts.map((p) => p.id));
+    for (const postId of postIds) {
+      if (!foundIds.has(postId)) {
+        errors.push({ postId, message: "Post not found or has been deleted" });
+      }
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const postId of postIds) {
+        const post = posts.find((p) => p.id === postId);
+        if (!post) {
+          failed++;
+          continue;
+        }
+
+        if (teamId && post.teamId !== teamId) {
+          errors.push({ postId, message: "Post does not belong to this team" });
+          failed++;
+          continue;
+        }
+
+        if (post.status !== "awaiting_approval") {
+          warnings.push({ postId, message: `Post is not awaiting approval (current: ${post.status})` });
+          skipped++;
           continue;
         }
 
         try {
           await tx.post.update({
             where: { id: postId },
-            data: {
-              status: action,
-              ...(action === "reject" ? { rejectionReason: reason ?? null } : {}),
-            },
+            data: { status: "rejected", rejectionReason: reason ?? null },
           });
-
-          if (action === "approve") approved++;
-          else rejected++;
+          rejected++;
         } catch {
           failed++;
-          errors.push({
-            postId,
-            message: `Failed to ${action} post`,
-          });
+          errors.push({ postId, message: "Failed to reject post" });
         }
       }
     });
 
-    return {
-      approved,
-      rejected,
-      failed,
-      errors,
-      warnings,
-    };
+    return { approved: rejected, failed, skipped, errors, warnings };
   }
 
   async getPendingPosts(teamId: string) {

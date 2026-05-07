@@ -66,7 +66,7 @@ export class AnalyticsExportService {
         teamId,
         ...dateRange,
       },
-      orderBy: { detectedAt: 'desc' },
+      orderBy: { createdAt: 'desc' },
     });
 
     return this.buildTrendsCsv(trends);
