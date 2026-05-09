@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { Skeleton } from "boneyard-js/react";
 import { Sparkles, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -94,7 +95,8 @@ export default function InboxPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 space-y-4">
+    <Skeleton name="inbox-page" loading={loading && posts.length === 0}>
+      <div className="p-4 md:p-6 space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-xl font-semibold">Inbox</h1>
@@ -193,6 +195,7 @@ export default function InboxPage() {
         onClose={() => setSendingEmailForPost(null)}
         onSend={handleSendEmail}
       />
-    </div>
+      </div>
+    </Skeleton>
   );
 }

@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Param, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt.guard';
@@ -7,6 +7,7 @@ import { SubscriptionFeatureLimit } from '../common/decorators/subscription-feat
 import { SubscriptionGuard } from '../common/guards/subscription.guard';
 import { AuthenticatedRequestUser } from '../common/interfaces/authenticated-request-user.interface';
 import { AnalyticsService } from './analytics.service';
+import { CampaignsService } from './campaigns.service';
 import { AnalyticsExportService } from './export.service';
 
 @UseGuards(JwtAuthGuard, SubscriptionGuard)
@@ -15,6 +16,7 @@ export class AnalyticsController {
   constructor(
     private readonly analyticsService: AnalyticsService,
     private readonly analyticsExportService: AnalyticsExportService,
+    private readonly campaignsService: CampaignsService,
   ) {}
 
   @Get('posts/:id')
@@ -107,11 +109,136 @@ export class AnalyticsController {
     );
   }
 
+  @Get('follower-growth')
+  @SubscriptionFeatureLimit('analytics')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async getFollowerGrowth(
+    @TeamId() teamId: string | undefined,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.analyticsService.getFollowerGrowth(
+      teamId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  @Get('video-metrics')
+  @SubscriptionFeatureLimit('analytics')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async getVideoMetrics(
+    @TeamId() teamId: string | undefined,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.analyticsService.getVideoMetrics(
+      teamId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
   @Get('best-posting-times')
   @SubscriptionFeatureLimit('analytics')
   async getBestPostingTimes(@TeamId() teamId: string | undefined) {
     if (!teamId) throw new BadRequestException('Missing team context');
     return this.analyticsService.getBestPostingTimes(teamId);
+  }
+
+  @Get('posting-heatmap')
+  @SubscriptionFeatureLimit('analytics')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async getPostingHeatmap(@TeamId() teamId: string | undefined) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.analyticsService.getPostingHeatmap(teamId);
+  }
+
+  @Get('engagement-benchmarks')
+  @SubscriptionFeatureLimit('analytics')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async getEngagementBenchmarks(
+    @TeamId() teamId: string | undefined,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.analyticsService.getEngagementBenchmarks(
+      teamId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  @Post('campaigns')
+  @SubscriptionFeatureLimit('analytics')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async createCampaign(
+    @TeamId() teamId: string | undefined,
+    @Body() body: { name: string; description?: string; startDate?: string; endDate?: string },
+  ) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.campaignsService.createCampaign(teamId, body);
+  }
+
+  @Get('campaigns')
+  @SubscriptionFeatureLimit('analytics')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async listCampaigns(@TeamId() teamId: string | undefined) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.campaignsService.listCampaigns(teamId);
+  }
+
+  @Get('campaigns/:id/stats')
+  @SubscriptionFeatureLimit('analytics')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async getCampaignStats(
+    @TeamId() teamId: string | undefined,
+    @Param('id') campaignId: string,
+  ) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.campaignsService.getCampaignStats(campaignId, teamId);
+  }
+
+  @Patch('campaigns/:id/posts')
+  @SubscriptionFeatureLimit('analytics')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async assignPostToCampaign(
+    @TeamId() teamId: string | undefined,
+    @Param('id') campaignId: string,
+    @Body() body: { postId: string },
+  ) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.campaignsService.assignPostToCampaign(body.postId, campaignId, teamId);
+  }
+
+  @Get('virality')
+  @SubscriptionFeatureLimit('analytics')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async getVirality(
+    @TeamId() teamId: string | undefined,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.analyticsService.getViralityScores(
+      teamId,
+      startDate ? new Date(startDate) : undefined,
+      endDate ? new Date(endDate) : undefined,
+    );
+  }
+
+  @Get('demographics')
+  @SubscriptionFeatureLimit('analytics')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async getDemographics(
+    @TeamId() teamId: string | undefined,
+    @Query('platform') platform?: string,
+  ) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.analyticsService.getDemographics(teamId, platform);
   }
 
   @Get('content-trends')

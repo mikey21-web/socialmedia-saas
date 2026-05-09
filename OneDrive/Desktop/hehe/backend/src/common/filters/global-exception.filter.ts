@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { Request, Response } from 'express';
 
 type RequestWithUser = Request & {
@@ -30,6 +31,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const error = this.getErrorMessage(exception);
 
     if (statusCode >= 500) {
+      Sentry.captureException(exception, {
+        extra: {
+          userId: request.user?.userId,
+          teamId: request.user?.team_id,
+          path: request.url,
+        },
+      });
       this.logger.error({
         userId: request.user?.userId,
         teamId: request.user?.team_id,

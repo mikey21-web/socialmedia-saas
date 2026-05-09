@@ -7,6 +7,12 @@ import cookieParser from 'cookie-parser';
 import express from 'express';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import {
+  createApiUsageMiddleware,
+  createAuditMiddleware,
+  createFeatureFlagMiddleware,
+} from './common/middleware/admin-observability.middleware';
+import { PrismaService } from './prisma/prisma.service';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
@@ -17,6 +23,10 @@ async function bootstrap(): Promise<void> {
   app.use('/subscriptions/webhook', express.raw({ type: 'application/json' }));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+  const prisma = app.get(PrismaService);
+  app.use(createFeatureFlagMiddleware(prisma));
+  app.use(createApiUsageMiddleware(prisma));
+  app.use(createAuditMiddleware(prisma));
 
   const allowedOrigins = process.env.CORS_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean) ?? [];
   app.enableCors({

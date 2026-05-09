@@ -1,60 +1,45 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, LinkIcon, Plus, X, Users } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { api } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 
-const steps = [
-  { title: "Set team name", href: "/settings/team", icon: CheckCircle2 },
-  { title: "Create first post", href: "/posts/create", icon: Plus },
-  { title: "Invite team member", href: "/settings/team", icon: Users },
+const STEPS = [
+  { id: 1, label: "Welcome", path: "/onboarding/step-1" },
+  { id: 2, label: "Business", path: "/onboarding/step-2" },
+  { id: 3, label: "Accounts", path: "/onboarding/step-3" },
+  { id: 4, label: "Audience", path: "/onboarding/step-4" },
+  { id: 5, label: "Goals", path: "/onboarding/step-5" },
+  { id: 6, label: "Brand Voice", path: "/onboarding/step-6" },
+  { id: 7, label: "Refine Voice", path: "/onboarding/step-7" },
+  { id: 8, label: "Brand Look", path: "/onboarding/step-8" },
+  { id: 9, label: "Schedule", path: "/onboarding/step-9" },
+  { id: 10, label: "Activate", path: "/onboarding/step-10" },
 ];
 
 export default function OnboardingPage() {
   const router = useRouter();
 
-  function complete() {
-    localStorage.setItem("onboardingComplete", "true");
-    router.replace("/dashboard");
-  }
-
-  function connect(platform: "twitter" | "linkedin") {
-    window.location.href = `${api.defaults.baseURL}/api/platforms/connect/${platform}`;
-  }
-
   return (
-    <Card className="p-5">
-      <h1 className="text-xl font-semibold">Launch your workspace</h1>
-      <div className="mt-5 space-y-3">
-        <div className="rounded-md border border-border p-3">
-          <p className="text-sm font-medium">Connect first platform</p>
-          <div className="mt-3 flex gap-2">
-            <Button onClick={() => connect("twitter")} className="h-11 gap-2 md:h-9">
-              <X className="size-4" />
-              Twitter/X
-            </Button>
-            <Button variant="outline" onClick={() => connect("linkedin")} className="h-11 gap-2 md:h-9">
-              <LinkIcon className="size-4" />
-              LinkedIn
-            </Button>
-          </div>
-        </div>
-        {steps.map(({ title, href, icon: Icon }) => (
-          <Link key={title} href={href} className="flex items-center justify-between rounded-md border border-border p-3 text-sm hover:bg-muted/50">
-            <span className="flex items-center gap-2">
-              <Icon className="size-4 text-muted-foreground" />
-              {title}
+    <Card className="p-6 space-y-4">
+      <h1 className="text-lg font-semibold">AI Agency Onboarding</h1>
+      <p className="text-sm text-muted-foreground">
+        Complete all 10 steps to set up your AI agency.
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        {STEPS.map(({ id, label, path }) => (
+          <Button
+            key={id}
+            variant="outline"
+            onClick={() => router.push(path)}
+            className="justify-start"
+          >
+            <span className="size-6 rounded-full bg-primary/10 text-primary text-xs font-semibold flex items-center justify-center mr-2">
+              {id}
             </span>
-            <span className="text-muted-foreground">Open</span>
-          </Link>
+            {label}
+          </Button>
         ))}
-      </div>
-      <div className="mt-5 flex justify-end gap-2">
-        <Button variant="outline" onClick={complete}>Skip</Button>
-        <Button onClick={complete}>Complete</Button>
       </div>
     </Card>
   );

@@ -41,7 +41,12 @@ export function buildPublishYouTubeActivity(platformsService: PlatformsService) 
         );
       }
 
-      const videoStream = await axios({ url: videoUrl, responseType: 'stream' });
+      const videoStream = await axios({
+        url: videoUrl,
+        responseType: 'stream',
+        maxContentLength: 50 * 1024 * 1024,
+        maxBodyLength: 50 * 1024 * 1024,
+      });
 
       const response = await youtube.videos.insert({
         part: ['snippet', 'status'],
@@ -65,7 +70,12 @@ export function buildPublishYouTubeActivity(platformsService: PlatformsService) 
       const thumbnailUrl = mediaUrls.find((url) => !/\.(mp4|mov|avi|mkv|webm)$/i.test(url));
       if (thumbnailUrl && videoId) {
         try {
-          const thumbStream = await axios({ url: thumbnailUrl, responseType: 'stream' });
+          const thumbStream = await axios({
+            url: thumbnailUrl,
+            responseType: 'stream',
+            maxContentLength: 50 * 1024 * 1024,
+            maxBodyLength: 50 * 1024 * 1024,
+          });
           await youtube.thumbnails.set({
             videoId,
             media: { body: thumbStream.data as NodeJS.ReadableStream },

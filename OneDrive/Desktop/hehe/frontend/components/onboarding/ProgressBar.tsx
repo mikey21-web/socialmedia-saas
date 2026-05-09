@@ -3,11 +3,16 @@
 import { cn } from "@/lib/utils";
 
 const STEPS = [
-  "Brand Info",
-  "Voice",
+  "Welcome",
+  "Business",
+  "Accounts",
   "Audience",
-  "Strategy",
-  "Competition",
+  "Goals",
+  "Brand Voice",
+  "Refine Voice",
+  "Brand Look",
+  "Schedule",
+  "Activate",
 ];
 
 export function ProgressBar({ currentStep }: { currentStep: number }) {
@@ -32,7 +37,7 @@ export function ProgressBar({ currentStep }: { currentStep: number }) {
               </div>
               <span
                 className={cn(
-                  "text-[11px] mt-1 hidden sm:block",
+                  "text-[11px] mt-1 hidden lg:block",
                   active ? "text-foreground font-medium" : "text-muted-foreground"
                 )}
               >

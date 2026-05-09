@@ -4,9 +4,11 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import StripeConstructor = require('stripe');
 import { EmailService } from '../email/email.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { AGENCY_TIERS, AgencyTier } from '../agency/agency-tiers.config';
 
 const ACTIVE_SUBSCRIPTION_STATUSES = new Set(['active', 'trialing']);
 
@@ -40,13 +42,25 @@ export class SubscriptionsService {
   ) {}
 
   listPlans() {
-    return ['free', 'pro'];
+    return Object.entries(AGENCY_TIERS).map(([id, tier]) => ({
+      id,
+      name: tier.name,
+      priceInr: tier.priceInr,
+      limits: tier.features,
+      stripePriceIdConfigured: Boolean(process.env[tier.stripePriceIdEnv]),
+    }));
   }
 
-  async createCheckoutSession(teamId: string, userId?: string) {
-    const priceId = process.env.STRIPE_PRO_PRICE_ID ?? process.env.STRIPE_PRICE_ID_PRO;
+  listTiers() {
+    return this.listPlans();
+  }
+
+  async createCheckoutSession(teamId: string, userId?: string, tier: AgencyTier = 'pro') {
+    const tierConfig = AGENCY_TIERS[tier];
+    const priceId = process.env[tierConfig.stripePriceIdEnv]
+      ?? (tier === 'pro' ? process.env.STRIPE_PRICE_ID_PRO : undefined);
     if (!priceId) {
-      throw new InternalServerErrorException('STRIPE_PRO_PRICE_ID is not configured');
+      throw new InternalServerErrorException(`${tierConfig.stripePriceIdEnv} is not configured`);
     }
 
     const team = await this.prisma.team.findFirst({
@@ -73,23 +87,27 @@ export class SubscriptionsService {
       ?? await this.createStripeCustomer(teamId, team.members[0]?.user.email, team.name);
 
     const baseUrl = process.env.APP_URL ?? process.env.FRONTEND_URL ?? 'http://localhost:3000';
-    const session = await this.getStripe().checkout.sessions.create({
-      mode: 'subscription',
-      customer: customerId,
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${baseUrl}/settings/billing?stripe=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/settings/billing?stripe=cancel`,
-      metadata: { teamId },
-      subscription_data: {
-        metadata: { teamId },
+    const session = await this.getStripe().checkout.sessions.create(
+      {
+        mode: 'subscription',
+        customer: customerId,
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: `${baseUrl}/settings/billing?stripe=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/settings/billing?stripe=cancel`,
+        metadata: { teamId, tier },
+        subscription_data: {
+          metadata: { teamId, tier },
+        },
       },
-    });
+      { idempotencyKey: `checkout-${teamId}-${randomUUID()}` },
+    );
 
     await this.prisma.subscription.update({
       where: { teamId },
       data: {
         stripeCustomerId: customerId,
         stripePriceId: priceId,
+        plan: tier,
       },
     });
 
@@ -107,10 +125,13 @@ export class SubscriptionsService {
     }
 
     const baseUrl = process.env.APP_URL ?? process.env.FRONTEND_URL ?? 'http://localhost:3000';
-    const session = await this.getStripe().billingPortal.sessions.create({
-      customer: subscription.stripeCustomerId,
-      return_url: `${baseUrl}/settings/billing`,
-    });
+    const session = await this.getStripe().billingPortal.sessions.create(
+      {
+        customer: subscription.stripeCustomerId,
+        return_url: `${baseUrl}/settings/billing`,
+      },
+      { idempotencyKey: `portal-${subscription.stripeCustomerId}-${randomUUID()}` },
+    );
 
     return { url: session.url };
   }
@@ -128,16 +149,40 @@ export class SubscriptionsService {
     ]);
     return {
       plan: this.resolvePlan(subscription.plan, subscription.status) as 'free' | 'pro',
+      agencyTier: this.resolveAgencyTier(subscription.plan, subscription.status),
       status: subscription.status,
       currentPeriodEnd: subscription.currentPeriodEnd,
       renewalDate: subscription.currentPeriodEnd,
       seats: subscription.seats,
-      limits: {
-        posts: { current: postsUsedThisMonth, max: 10 },
-        platforms: { current: platformsConnected, max: 3 },
-        members: { current: memberCount, max: 2 },
-      },
+      limits: this.buildUsageLimits(
+        this.resolveAgencyTier(subscription.plan, subscription.status),
+        { postsUsedThisMonth, platformsConnected, memberCount },
+      ),
     };
+  }
+
+  async getUsage(teamId: string) {
+    const [subscription, postsUsedThisMonth, platformsConnected, memberCount, aiRunsToday, carouselsThisMonth, reportsThisWeek, brandVoiceProfiles] = await Promise.all([
+      this.ensureSubscription(teamId),
+      this.getMonthlyScheduledPostCount(teamId),
+      this.prisma.platformCredential.count({ where: { teamId } }),
+      this.prisma.teamMember.count({ where: { teamId } }),
+      this.getDailyAiRunCount(teamId),
+      this.getMonthlyCarouselCount(teamId),
+      this.getWeeklyReportCount(teamId),
+      this.prisma.brandVoiceProfile.count({ where: { teamId } }),
+    ]);
+    const tier = this.resolveAgencyTier(subscription.plan, subscription.status);
+    const usage = this.buildUsageLimits(tier, {
+      postsUsedThisMonth,
+      platformsConnected,
+      memberCount,
+      aiRunsToday,
+      carouselsThisMonth,
+      reportsThisWeek,
+      brandVoiceProfiles,
+    });
+    return { tier, usage };
   }
 
   async upgradeTeam(teamId: string, stripeSessionId: string) {
@@ -265,7 +310,7 @@ export class SubscriptionsService {
 
   async getTeamPlan(teamId: string) {
     const subscription = await this.ensureSubscription(teamId);
-    return this.resolvePlan(subscription.plan, subscription.status) as 'free' | 'pro';
+    return this.resolveAgencyTier(subscription.plan, subscription.status);
   }
 
   async getDailyPostCount(teamId: string) {
@@ -309,6 +354,30 @@ export class SubscriptionsService {
     });
   }
 
+  async getDailyAiRunCount(teamId: string) {
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    return this.prisma.agentRunLog.count({
+      where: { teamId, createdAt: { gte: dayStart } },
+    });
+  }
+
+  async getMonthlyCarouselCount(teamId: string) {
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    return this.prisma.carousel.count({
+      where: { teamId, createdAt: { gte: monthStart } },
+    });
+  }
+
+  async getWeeklyReportCount(teamId: string) {
+    const weekStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    return this.prisma.report.count({
+      where: { teamId, generatedAt: { gte: weekStart } },
+    });
+  }
+
   private async updateByCustomer(
     stripeCustomerId: string,
     data: {
@@ -341,11 +410,14 @@ export class SubscriptionsService {
   }
 
   private async createStripeCustomer(teamId: string, email: string | undefined, teamName: string) {
-    const customer = await this.getStripe().customers.create({
-      email,
-      name: teamName,
-      metadata: { teamId },
-    });
+    const customer = await this.getStripe().customers.create(
+      {
+        email,
+        name: teamName,
+        metadata: { teamId },
+      },
+      { idempotencyKey: `customer-${teamId}-${randomUUID()}` },
+    );
     return customer.id;
   }
 
@@ -408,7 +480,9 @@ export class SubscriptionsService {
     const periodEnd = subscription.current_period_end
       ? new Date(subscription.current_period_end * 1000)
       : null;
-    const plan = ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status) ? 'pro' : 'free';
+    const plan = this.tierFromStripePrice(subscription.items.data[0]?.price.id)
+      ?? subscription.metadata.tier
+      ?? (ACTIVE_SUBSCRIPTION_STATUSES.has(subscription.status) ? 'pro' : 'solo');
 
     if (teamId) {
       await this.prisma.subscription.upsert({
@@ -460,6 +534,57 @@ export class SubscriptionsService {
   }
 
   private resolvePlan(plan: string, status: string) {
-    return plan === 'pro' && ACTIVE_SUBSCRIPTION_STATUSES.has(status) ? 'pro' : 'free';
+    return ACTIVE_SUBSCRIPTION_STATUSES.has(status) ? plan : 'free';
+  }
+
+  private resolveAgencyTier(plan: string, status: string): AgencyTier {
+    if (!ACTIVE_SUBSCRIPTION_STATUSES.has(status)) return 'solo';
+    return this.isAgencyTier(plan) ? plan : 'solo';
+  }
+
+  private isAgencyTier(plan: string): plan is AgencyTier {
+    return Object.prototype.hasOwnProperty.call(AGENCY_TIERS, plan);
+  }
+
+  private tierFromStripePrice(priceId?: string): AgencyTier | undefined {
+    if (!priceId) return undefined;
+    return Object.entries(AGENCY_TIERS).find(([, tier]) => process.env[tier.stripePriceIdEnv] === priceId)?.[0] as AgencyTier | undefined;
+  }
+
+  private buildUsageLimits(
+    tier: AgencyTier,
+    usage: {
+      postsUsedThisMonth: number;
+      platformsConnected: number;
+      memberCount: number;
+      aiRunsToday?: number;
+      carouselsThisMonth?: number;
+      reportsThisWeek?: number;
+      brandVoiceProfiles?: number;
+    },
+  ) {
+    const limits = AGENCY_TIERS[tier].features;
+    if ('unlimited' in limits && limits.unlimited) {
+      return {
+        unlimited: true,
+        posts: { current: usage.postsUsedThisMonth, max: null },
+        platforms: { current: usage.platformsConnected, max: null },
+        members: { current: usage.memberCount, max: null },
+        aiRuns: { current: usage.aiRunsToday ?? 0, max: null },
+        carousels: { current: usage.carouselsThisMonth ?? 0, max: null },
+        reports: { current: usage.reportsThisWeek ?? 0, max: null },
+        brandVoiceProfiles: { current: usage.brandVoiceProfiles ?? 0, max: null },
+      };
+    }
+
+    return {
+      posts: { current: usage.postsUsedThisMonth, max: limits.postsPerMonth },
+      platforms: { current: usage.platformsConnected, max: limits.platformsPerAccount },
+      members: { current: usage.memberCount, max: limits.teamMembers },
+      aiRuns: { current: usage.aiRunsToday ?? 0, max: limits.aiRunsPerDay },
+      carousels: { current: usage.carouselsThisMonth ?? 0, max: limits.carouselsPerMonth },
+      reports: { current: usage.reportsThisWeek ?? 0, max: limits.reportsPerWeek },
+      brandVoiceProfiles: { current: usage.brandVoiceProfiles ?? 0, max: limits.brandVoiceProfiles },
+    };
   }
 }

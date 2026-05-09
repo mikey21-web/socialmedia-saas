@@ -17,7 +17,7 @@ export class AiService {
   private readonly client: Groq;
 
   constructor() {
-    this.client = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    this.client = new Groq({ apiKey: process.env.GROQ_API_KEY || 'placeholder' });
   }
 
   async generateCaption(dto: GenerateCaptionDto): Promise<GeneratedCaption> {

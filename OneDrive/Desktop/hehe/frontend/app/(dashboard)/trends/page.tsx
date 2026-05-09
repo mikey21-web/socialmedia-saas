@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Skeleton } from "boneyard-js/react";
 import { Flame, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TrendCard, type TrendItem } from "@/components/trends/TrendCard";
@@ -62,7 +63,8 @@ export default function TrendsPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
+    <Skeleton name="trends-page" loading={loading}>
+      <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold flex items-center gap-2">
@@ -124,6 +126,7 @@ export default function TrendsPage() {
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </Skeleton>
   );
 }

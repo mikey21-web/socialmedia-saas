@@ -58,6 +58,77 @@ export class EmailService {
     });
   }
 
+  async sendWeeklyDigest(
+    email: string,
+    data: {
+      name: string;
+      appName: string;
+      appUrl: string;
+      postsPublished: number;
+      totalImpressions: number;
+      totalEngagements: number;
+      engagementRate: string;
+      topPostTitle: string;
+      topPostEngagements: number;
+    },
+  ) {
+    const {
+      name,
+      appName,
+      appUrl,
+      postsPublished,
+      totalImpressions,
+      totalEngagements,
+      engagementRate,
+      topPostTitle,
+      topPostEngagements,
+    } = data;
+
+    return this.send({
+      to: email,
+      subject: `Your weekly social media report — ${appName}`,
+      text:
+        `Hi ${name}, here's your weekly summary:\n\n` +
+        `Posts published: ${postsPublished}\n` +
+        `Total impressions: ${totalImpressions.toLocaleString()}\n` +
+        `Total engagements: ${totalEngagements.toLocaleString()}\n` +
+        `Engagement rate: ${engagementRate}%\n` +
+        `Top post: "${topPostTitle}" (${topPostEngagements} engagements)\n\n` +
+        `View full analytics: ${appUrl}/analytics`,
+      html: `
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:32px;background:#0f172a;color:#f8fafc;border-radius:12px;">
+          <h2 style="color:#6366f1;margin:0 0 8px">Weekly Report</h2>
+          <p style="color:#94a3b8;margin:0 0 32px">Hi ${this.escapeHtml(name)},</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:32px;">
+            <div style="background:#1e293b;padding:20px;border-radius:8px;">
+              <div style="color:#94a3b8;font-size:12px;margin-bottom:4px">POSTS PUBLISHED</div>
+              <div style="font-size:32px;font-weight:700">${postsPublished}</div>
+            </div>
+            <div style="background:#1e293b;padding:20px;border-radius:8px;">
+              <div style="color:#94a3b8;font-size:12px;margin-bottom:4px">IMPRESSIONS</div>
+              <div style="font-size:32px;font-weight:700">${totalImpressions.toLocaleString()}</div>
+            </div>
+            <div style="background:#1e293b;padding:20px;border-radius:8px;">
+              <div style="color:#94a3b8;font-size:12px;margin-bottom:4px">ENGAGEMENTS</div>
+              <div style="font-size:32px;font-weight:700">${totalEngagements.toLocaleString()}</div>
+            </div>
+            <div style="background:#1e293b;padding:20px;border-radius:8px;">
+              <div style="color:#94a3b8;font-size:12px;margin-bottom:4px">ENGAGEMENT RATE</div>
+              <div style="font-size:32px;font-weight:700">${engagementRate}%</div>
+            </div>
+          </div>
+          <div style="background:#1e293b;padding:20px;border-radius:8px;margin-bottom:32px;">
+            <div style="color:#94a3b8;font-size:12px;margin-bottom:8px">TOP PERFORMING POST</div>
+            <div style="font-weight:600">${this.escapeHtml(topPostTitle)}</div>
+            <div style="color:#6366f1;font-size:14px">${topPostEngagements} engagements</div>
+          </div>
+          <a href="${this.escapeHtml(appUrl)}/analytics" style="display:inline-block;background:#6366f1;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600">
+            View Full Analytics →
+          </a>
+        </div>`,
+    });
+  }
+
   private async send(message: EmailMessage) {
     const service = process.env.EMAIL_SERVICE;
     if (service === 'resend' || process.env.RESEND_API_KEY) {

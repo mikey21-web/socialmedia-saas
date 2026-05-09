@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { Skeleton } from "boneyard-js/react";
 import { useRouter } from "next/navigation";
 import { Sparkles, RefreshCw, ArrowRight, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
@@ -88,7 +89,8 @@ export default function RecommendationsPage() {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <Skeleton name="recommendations-page" loading={loading}>
+      <div className="p-6 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <Sparkles className="size-5 text-primary" />
@@ -169,6 +171,7 @@ export default function RecommendationsPage() {
           ))}
         </div>
       )}
-    </div>
+      </div>
+    </Skeleton>
   );
 }

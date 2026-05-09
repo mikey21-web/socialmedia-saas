@@ -1,11 +1,12 @@
 import { Controller, Delete, Get, Param, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/jwt.guard';
+import { PlanLimit, PlanLimitGuard } from '../common/guards/plan-limit.guard';
 import { AuthenticatedRequestUser } from '../common/interfaces/authenticated-request-user.interface';
 import { OauthService } from './oauth.service';
 import { PlatformsService } from './platforms.service';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PlanLimitGuard)
 @Controller(['platforms', 'api/platforms'])
 export class PlatformsController {
   constructor(
@@ -19,6 +20,7 @@ export class PlatformsController {
   }
 
   @Get('connect/:platform')
+  @PlanLimit('accounts')
   async connect(
     @Param('platform') platform: string,
     @Req() req: { user: AuthenticatedRequestUser },

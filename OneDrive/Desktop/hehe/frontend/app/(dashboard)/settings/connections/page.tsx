@@ -1,120 +1,75 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { LinkIcon, Loader2, Plug, RefreshCw, Trash2, X } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { api } from "@/lib/api";
+import { useEffect, useState } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
-type Credential = {
-  id: string;
-  platform: string;
-  accountName: string | null;
-  accountId: string | null;
-  expiresAt: string | null;
-  status: "connected" | "expired" | "failed";
-};
-
-const platforms = [
-  { key: "twitter", label: "Twitter/X", icon: X },
-  { key: "linkedin", label: "LinkedIn", icon: LinkIcon },
+const PLATFORMS = [
+  { id: 'x', name: 'X (Twitter)', icon: '𝕏' },
+  { id: 'instagram', name: 'Instagram', icon: '📷' },
+  { id: 'linkedin', name: 'LinkedIn', icon: '🔗' },
+  { id: 'facebook', name: 'Facebook', icon: '👍' },
+  { id: 'tiktok', name: 'TikTok', icon: '🎵' },
 ];
 
-export default function ConnectionsPage() {
-  const [credentials, setCredentials] = useState<Credential[]>([]);
-  const [loading, setLoading] = useState(true);
+interface ConnectionStatus {
+  platform: string;
+  connected: boolean;
+  account?: string;
+  connectedAt?: string;
+}
 
-  async function load() {
-    setLoading(true);
-    try {
-      const response = await api.get<Credential[]>("/api/platforms/credentials");
-      setCredentials(response.data);
-    } finally {
-      setLoading(false);
-    }
-  }
+export default function ConnectionsPage() {
+  const [connections, setConnections] = useState<ConnectionStatus[]>([]);
 
   useEffect(() => {
-    queueMicrotask(() => {
-      void load();
-    });
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/platforms/connections`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('jwt_token')}` },
+    })
+      .then((r) => r.json())
+      .then((data) => setConnections(data))
+      .catch(() => {});
   }, []);
 
-  async function disconnect(id: string) {
-    await api.delete(`/api/platforms/credentials/${id}`);
-    await load();
-  }
-
-  function connect(platform: string) {
-    window.location.assign(`${api.defaults.baseURL}/api/platforms/connect/${platform}`);
-  }
+  const handleConnect = (platform: string) => {
+    window.location.href = `/api/auth/oauth/${platform}`;
+  };
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <div>
-        <h1 className="text-xl font-semibold">Connections</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Connect publishing accounts for this workspace.</p>
-      </div>
+    <div className="p-6 bg-gray-950 min-h-screen max-w-2xl">
+      <h1 className="text-3xl font-bold mb-6">Platform Connections</h1>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        {platforms.map(({ key, label, icon: Icon }) => {
-          const credential = credentials.find((item) => item.platform === key || (key === "twitter" && item.platform === "x"));
+      <div className="space-y-4">
+        {PLATFORMS.map((platform) => {
+          const conn = connections.find((c) => c.platform === platform.id);
           return (
-            <Card key={key} className="p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex size-10 items-center justify-center rounded-md bg-muted">
-                    <Icon className="size-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="font-medium">{label}</p>
-                    <p className="truncate text-sm text-muted-foreground">
-                      {credential?.accountName ?? credential?.accountId ?? "Not connected"}
+            <Card key={platform.id} className="bg-gray-900 border-gray-800">
+              <CardContent className="pt-6 flex justify-between items-center">
+                <div>
+                  <p className="text-lg font-semibold">
+                    {platform.icon} {platform.name}
+                  </p>
+                  {conn?.connected && (
+                    <p className="text-sm text-gray-500">
+                      Connected: {conn.account}
                     </p>
-                  </div>
+                  )}
                 </div>
-                <Badge variant="outline" className="capitalize">
-                  {credential?.status ?? "Disconnected"}
-                </Badge>
-              </div>
-              {credential?.expiresAt && (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Expires {new Date(credential.expiresAt).toLocaleDateString()}
-                </p>
-              )}
-              <div className="mt-4 flex gap-2">
-                {credential ? (
-                  <>
-                    {credential.status !== "connected" && (
-                      <Button variant="outline" onClick={() => connect(key)} className="h-11 gap-2 md:h-9">
-                        <RefreshCw className="size-4" />
-                        Reconnect
-                      </Button>
-                    )}
-                    <Button variant="destructive" onClick={() => disconnect(credential.id)} className="h-11 gap-2 md:h-9">
-                      <Trash2 className="size-4" />
-                      Disconnect
+                <div>
+                  {conn?.connected ? (
+                    <Badge className="bg-green-600">Connected</Badge>
+                  ) : (
+                    <Button onClick={() => handleConnect(platform.id)}>
+                      Connect
                     </Button>
-                  </>
-                ) : (
-                  <Button onClick={() => connect(key)} className="h-11 gap-2 md:h-9">
-                    <Plug className="size-4" />
-                    Connect
-                  </Button>
-                )}
-              </div>
+                  )}
+                </div>
+              </CardContent>
             </Card>
           );
         })}
       </div>
-
-      {loading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" />
-          Loading connections...
-        </div>
-      )}
     </div>
   );
 }

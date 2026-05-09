@@ -8,63 +8,87 @@ generator client {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  password  String
+  id               String       @id @default(cuid())
+  email            String       @unique
+  name             String?
+  password         String
   refreshTokenHash String?
-  role      String   @default("user")
-  suspended Boolean  @default(false)
-  suspendedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  deletedAt DateTime?
-  teams     TeamMember[]
+  role             String       @default("user")
+  suspended        Boolean      @default(false)
+  suspendedAt      DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  deletedAt        DateTime?
+  teams            TeamMember[]
+
   @@index([email])
   @@index([role])
 }
+
 model Team {
-  id        String   @id @default(cuid())
-  name      String
-  ownerId   String
-  signature String?  @db.Text
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  deletedAt DateTime?
-  members           TeamMember[]
-  posts             Post[]
-  credentials       PlatformCredential[]
-  subscription      Subscription?
-  postSets          PostSet[]
-  thirdParties      ThirdPartyIntegration[]
-  mediaAssets       MediaAsset[]
-  rssSources        RssSource[]
-  trendItems        TrendItem[]
-  brandProfile      BrandProfile?
-  agentRuns         AgentRun[]
-  abTests           AbTest[]
+  id                   String                  @id @default(cuid())
+  name                 String
+  ownerId              String
+  signature            String?                 @db.Text
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  deletedAt            DateTime?
+  lastBackupAt         DateTime?                @map("last_backup_at")
+  members              TeamMember[]
+  posts                Post[]
+  credentials          PlatformCredential[]
+  subscription         Subscription?
+  postSets             PostSet[]
+  thirdParties         ThirdPartyIntegration[]
+  mediaAssets          MediaAsset[]
+  rssSources           RssSource[]
+  trendItems           TrendItem[]
+  brandProfile         BrandProfile?
+  agentRuns            AgentRun[]
+  abTests              AbTest[]
+  followerSnapshots    FollowerSnapshot[]
+  campaigns            Campaign[]
+  audienceDemographics AudienceDemographic[]
+  notifications        Notification[]
+  goals                Goal[]
+  agentSessions        AgentSession[]
+  verticalProfileId    String?
+  brandVoices          BrandVoice[]
+  contentStrategies    ContentStrategy[]
+  engagementActions    EngagementAction[]
+  agentRunLogs         AgentRunLog[]
+  onboardingComplete   Boolean                 @default(false)
+  agencyTier           String                  @default("solo")
+  brandVoiceProfiles   BrandVoiceProfile[]
+  carousels            Carousel[]
+  competitorTracks     CompetitorTrack[]
+  reports              Report[]
+
   @@index([ownerId])
 }
+
 model TeamMember {
   id     String @id @default(cuid())
   userId String
   teamId String
   role   String @default("editor")
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   @@unique([userId, teamId])
   @@index([teamId])
 }
+
 model Post {
-  id                String    @id @default(cuid())
+  id                String           @id @default(cuid())
   teamId            String
   title             String
   content           String
-  mediaUrls         Json      @default("[]")
-  status            String    @default("draft")
+  mediaUrls         Json             @default("[]")
+  status            String           @default("draft")
   scheduledAt       DateTime?
   postDelay         Int?
-  isRecurring       Boolean   @default(false)
+  isRecurring       Boolean          @default(false)
   recurrencePattern String?
   recurrenceEndAt   DateTime?
   nextPublishAt     DateTime?
@@ -75,77 +99,103 @@ model Post {
   rejectionReason   String?
   abTestId          String?
   abTestVariant     String?
-  reach             Int       @default(0)
-  impressions       Int       @default(0)
+  campaignId        String?
+  reach             Int              @default(0)
+  impressions       Int              @default(0)
   metricsUpdatedAt  DateTime?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
   deletedAt         DateTime?
-  team      Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  platforms PostPlatform[]
-  analytics AnalyticsEvent[]
-  postSet   PostSet?         @relation(fields: [postSetId], references: [id])
-  comments  Comment[]
-  abTest    AbTest?          @relation(fields: [abTestId], references: [id])
-  publishLogs  PostPublishLog[]
+  team              Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  platforms         PostPlatform[]
+  analytics         AnalyticsEvent[]
+  postSet           PostSet?         @relation(fields: [postSetId], references: [id])
+  comments          Comment[]
+  abTest            AbTest?          @relation(fields: [abTestId], references: [id])
+  campaign          Campaign?        @relation(fields: [campaignId], references: [id])
+  publishLogs       PostPublishLog[]
+
   @@index([teamId])
   @@index([status])
   @@index([postSetId])
   @@index([abTestId])
+  @@index([campaignId])
 }
+
 model PostPlatform {
-  id             String @id @default(cuid())
+  id             String  @id @default(cuid())
   postId         String
   platform       String
   platformPostId String?
-  status         String @default("pending")
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  status         String  @default("pending")
+  post           Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+
   @@unique([postId, platform])
 }
+
 model PlatformCredential {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   teamId       String
   platform     String
   accountId    String?
   accountName  String?
-  accessToken  String   @db.Text
-  refreshToken String?  @db.Text
+  accessToken  String    @db.Text
+  refreshToken String?   @db.Text
   expiresAt    DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  team         Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   @@unique([teamId, platform, accountId])
   @@index([teamId])
   @@index([teamId, platform])
 }
+
 model Subscription {
-  id               String   @id @default(cuid())
-  teamId           String   @unique
-  plan             String   @default("free")
-  seats            Int      @default(1)
+  id               String    @id @default(cuid())
+  teamId           String    @unique
+  plan             String    @default("free")
+  seats            Int       @default(1)
   stripeCustomerId String?
   stripePriceId    String?
   stripeId         String?
-  status           String   @default("active")
+  status           String    @default("active")
   currentPeriodEnd DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
   canceledAt       DateTime?
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team             Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   @@index([stripeCustomerId])
   @@index([stripePriceId])
   @@index([stripeId])
 }
+
 model AnalyticsEvent {
   id          String   @id @default(cuid())
   postId      String
   eventType   String
   count       Int      @default(1)
   collectedAt DateTime @default(now())
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  post        Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
   @@index([postId])
   @@index([eventType])
 }
+
+model FollowerSnapshot {
+  id         String   @id @default(cuid())
+  teamId     String
+  platform   String
+  count      Int
+  recordedAt DateTime @default(now())
+  team       Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([teamId, platform])
+  @@index([recordedAt])
+}
+
 model PostSet {
   id          String    @id @default(cuid())
   teamId      String
@@ -154,10 +204,28 @@ model PostSet {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
-  team  Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  posts Post[]
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  posts       Post[]
+
   @@index([teamId])
 }
+
+model Campaign {
+  id          String    @id @default(cuid())
+  teamId      String
+  name        String
+  description String?
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  posts       Post[]
+
+  @@index([teamId])
+}
+
 model Comment {
   id              String    @id @default(cuid())
   postId          String
@@ -172,56 +240,216 @@ model Comment {
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?
 
-  post            Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
-  parentComment   Comment?   @relation("CommentReplies", fields: [parentCommentId], references: [id], onDelete: Cascade)
-  replies         Comment[]  @relation("CommentReplies")
+  post          Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parentComment Comment?  @relation("CommentReplies", fields: [parentCommentId], references: [id], onDelete: Cascade)
+  replies       Comment[] @relation("CommentReplies")
 
   @@index([postId])
   @@index([parentCommentId])
 }
+
 model MediaAsset {
-  id         String    @id @default(cuid())
-  teamId     String
-  filename   String
-  url        String
-  mimeType   String?
-  size       Int?
-  metadata   Json?
-  tags       String[]  @default([])
-  createdAt  DateTime  @default(now())
-  team      Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  teamId    String
+  filename  String
+  url       String
+  mimeType  String?
+  size      Int?
+  metadata  Json?
+  tags      String[] @default([])
+  createdAt DateTime @default(now())
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   @@index([teamId])
 }
+
 model AuditLog {
-  id         String   @id @default(cuid())
-  teamId     String
-  userId     String
-  action     String
-  entity     String?
-  entityId   String?
-  metadata   Json?
-  ipAddress  String?
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  teamId    String
+  userId    String
+  action    String
+  entity    String?
+  entityId  String?
+  resource  String?
+  oldValue  Json?
+  newValue  Json?
+  metadata  Json?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
   @@index([teamId])
   @@index([userId])
+  @@index([action])
+  @@index([createdAt])
 }
+
+model FeatureFlag {
+  id                String   @id @default(cuid())
+  name              String   @unique
+  enabled           Boolean  @default(false)
+  description       String?
+  rolloutPercentage Int      @default(0) @map("rollout_percentage")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([enabled])
+  @@map("feature_flags")
+}
+
+model ApiUsageLog {
+  id             String   @id @default(cuid())
+  teamId         String?  @map("team_id")
+  endpoint       String
+  method         String
+  statusCode     Int      @map("status_code")
+  responseTimeMs Int      @map("response_time_ms")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([teamId])
+  @@index([endpoint])
+  @@index([createdAt])
+  @@index([statusCode])
+  @@map("api_usage_logs")
+}
+
+model AdminWebhook {
+  id             String            @id @default(cuid())
+  eventType      String            @map("event_type")
+  url            String
+  active         Boolean           @default(true)
+  lastTriggered  DateTime?         @map("last_triggered")
+  deliveryStatus String?           @map("delivery_status")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  deliveries     WebhookDelivery[]
+
+  @@index([eventType])
+  @@index([active])
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id             String       @id @default(cuid())
+  webhookId      String       @map("webhook_id")
+  statusCode     Int?         @map("status_code")
+  status         String
+  responseBody   String?      @map("response_body") @db.Text
+  error          String?      @db.Text
+  responseTimeMs Int?         @map("response_time_ms")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  webhook        AdminWebhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId])
+  @@index([createdAt])
+  @@map("webhook_deliveries")
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  teamId      String    @map("team_id")
+  keyHash     String    @map("key_hash")
+  description String?
+  lastUsed    DateTime? @map("last_used")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  revokedAt   DateTime? @map("revoked_at")
+
+  @@index([teamId])
+  @@index([revokedAt])
+  @@map("api_keys")
+}
+
+model IpWhitelist {
+  id          String   @id @default(cuid())
+  teamId      String   @map("team_id")
+  ipAddress   String   @map("ip_address")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([teamId, ipAddress])
+  @@index([teamId])
+  @@map("ip_whitelist")
+}
+
+model ActiveSession {
+  id        String   @id @default(cuid())
+  teamId    String   @map("team_id")
+  userId    String   @map("user_id")
+  token     String   @db.Text
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent") @db.Text
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  @@index([teamId])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("active_sessions")
+}
+
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  subject   String
+  htmlBody  String   @map("html_body") @db.Text
+  textBody  String?  @map("text_body") @db.Text
+  variables Json     @default("[]")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("email_templates")
+}
+
+model SupportTicket {
+  id          String                 @id @default(cuid())
+  teamId      String                 @map("team_id")
+  subject     String
+  description String                 @db.Text
+  status      String                 @default("open")
+  priority    String                 @default("normal")
+  assignedTo  String?                @map("assigned_to")
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
+  messages    SupportTicketMessage[]
+
+  @@index([teamId])
+  @@index([status])
+  @@index([priority])
+  @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id        String        @id @default(cuid())
+  ticketId  String        @map("ticket_id")
+  userId    String?       @map("user_id")
+  author    String?
+  body      String        @db.Text
+  createdAt DateTime      @default(now()) @map("created_at")
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("support_ticket_messages")
+}
+
 model ThirdPartyIntegration {
-  id           String   @id @default(cuid())
-  teamId       String
-  identifier   String?
-  name         String?
-  username     String?
-  externalId   String?
-  type         String
-  apiKey       String?
-  config       Json     @default("{}")
-  enabled      Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  team         Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  id         String   @id @default(cuid())
+  teamId     String
+  identifier String?
+  name       String?
+  username   String?
+  externalId String?
+  type       String
+  apiKey     String?
+  config     Json     @default("{}")
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  team       Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   @@unique([teamId, identifier])
   @@index([teamId])
 }
+
 model RssSource {
   id          String    @id @default(cuid())
   teamId      String
@@ -232,9 +460,11 @@ model RssSource {
   autoPublish Boolean   @default(false)
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())
-  team        Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   @@index([teamId])
 }
+
 model TrendItem {
   id              String    @id @default(cuid())
   teamId          String
@@ -254,93 +484,105 @@ model TrendItem {
   expiresAt       DateTime?
   convertedPostId String?
   createdAt       DateTime  @default(now())
-  team            Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team            Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   @@index([teamId])
   @@index([status])
   @@index([relevanceScore])
 }
+
 model BrandProfile {
-  id              String   @id @default(cuid())
-  teamId          String   @unique
-  brandName       String
-  industry        String
-  description     String   @db.Text
-  voiceTone       String
-  voiceTraits     String[] @default([])
-  formalityLevel  Int      @default(5)
-  audienceAge     String
-  audienceGender  String
-  audienceLocation String[] @default([])
-  audienceInterests String[] @default([])
-  audiencePainPoints String[] @default([])
-  primaryGoal     String
-  secondaryGoals  String[] @default([])
-  platforms       String[] @default([])
-  postsPerWeek    Json     @default("{}")
-  contentMix      Json     @default("{}")
-  alwaysWords     String[] @default([])
-  neverWords      String[] @default([])
-  emojiUsage      String   @default("moderate")
-  hashtagStyle    String   @default("moderate")
-  autonomousMode  Boolean  @default(false)
-  approvalRequired Boolean @default(true)
-  onboardingComplete Boolean @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  team            Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  pillars         ContentPillar[]
-  competitors     Competitor[]
-  voiceExamples   VoiceExample[]
+  id                 String          @id @default(cuid())
+  teamId             String          @unique
+  brandName          String
+  industry           String
+  description        String          @db.Text
+  voiceTone          String
+  voiceTraits        String[]        @default([])
+  formalityLevel     Int             @default(5)
+  audienceAge        String
+  audienceGender     String
+  audienceLocation   String[]        @default([])
+  audienceInterests  String[]        @default([])
+  audiencePainPoints String[]        @default([])
+  primaryGoal        String
+  secondaryGoals     String[]        @default([])
+  platforms          String[]        @default([])
+  postsPerWeek       Json            @default("{}")
+  contentMix         Json            @default("{}")
+  alwaysWords        String[]        @default([])
+  neverWords         String[]        @default([])
+  emojiUsage         String          @default("moderate")
+  hashtagStyle       String          @default("moderate")
+  autonomousMode     Boolean         @default(false)
+  approvalRequired   Boolean         @default(true)
+  onboardingComplete Boolean         @default(false)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  team               Team            @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  pillars            ContentPillar[]
+  competitors        Competitor[]
+  voiceExamples      VoiceExample[]
+
   @@index([teamId])
 }
+
 model ContentPillar {
-  id              String   @id @default(cuid())
-  brandProfileId  String
-  name            String
-  description     String   @db.Text
-  weight          Int      @default(20)
-  keywords        String[] @default([])
-  createdAt       DateTime @default(now())
-  brandProfile    BrandProfile @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
+  id             String       @id @default(cuid())
+  brandProfileId String
+  name           String
+  description    String       @db.Text
+  weight         Int          @default(20)
+  keywords       String[]     @default([])
+  createdAt      DateTime     @default(now())
+  brandProfile   BrandProfile @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
+
   @@index([brandProfileId])
 }
+
 model Competitor {
-  id              String   @id @default(cuid())
-  brandProfileId  String
-  name            String
-  handles         Json     @default("{}")
-  url             String?
-  notes           String?  @db.Text
-  isActive        Boolean  @default(true)
-  lastScrapedAt   DateTime?
-  createdAt       DateTime @default(now())
-  brandProfile    BrandProfile @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
-  snapshots       CompetitorSnapshot[]
+  id             String               @id @default(cuid())
+  brandProfileId String
+  name           String
+  handles        Json                 @default("{}")
+  url            String?
+  notes          String?              @db.Text
+  isActive       Boolean              @default(true)
+  lastScrapedAt  DateTime?
+  createdAt      DateTime             @default(now())
+  brandProfile   BrandProfile         @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
+  snapshots      CompetitorSnapshot[]
+
   @@index([brandProfileId])
 }
+
 model CompetitorSnapshot {
-  id              String   @id @default(cuid())
-  competitorId    String
-  platform        String
-  postsCount      Int
-  followersCount  Int?
-  topPosts        Json     @default("[]")
-  capturedAt      DateTime @default(now())
-  competitor      Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+  id             String     @id @default(cuid())
+  competitorId   String
+  platform       String
+  postsCount     Int
+  followersCount Int?
+  topPosts       Json       @default("[]")
+  capturedAt     DateTime   @default(now())
+  competitor     Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
   @@index([competitorId])
   @@index([capturedAt])
 }
+
 model VoiceExample {
-  id              String   @id @default(cuid())
-  brandProfileId  String
-  content         String   @db.Text
-  platform        String?
+  id               String       @id @default(cuid())
+  brandProfileId   String
+  content          String       @db.Text
+  platform         String?
   performanceScore Int?
-  source          String   @default("manual")
-  createdAt       DateTime @default(now())
-  brandProfile    BrandProfile @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
+  source           String       @default("manual")
+  createdAt        DateTime     @default(now())
+  brandProfile     BrandProfile @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
+
   @@index([brandProfileId])
 }
+
 model ApprovalToken {
   id        String    @id @default(cuid())
   token     String    @unique
@@ -350,62 +592,84 @@ model ApprovalToken {
   usedAt    DateTime?
   expiresAt DateTime
   createdAt DateTime  @default(now())
+
   @@index([token])
   @@index([postId])
 }
+
 model AgentRun {
-  id              String    @id @default(cuid())
-  teamId          String
-  agentType       String
-  status          String    @default("running")
-  input           Json
-  output          Json?
-  error           String?
-  steps           Json      @default("[]")
-  startedAt       DateTime  @default(now())
-  completedAt     DateTime?
-  team            Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  teamId      String
+  agentType   String
+  status      String    @default("running")
+  input       Json
+  output      Json?
+  error       String?
+  steps       Json      @default("[]")
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+  team        Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
   @@index([teamId])
   @@index([agentType])
   @@index([status])
 }
+
 model AbTest {
-  id                 String    @id @default(cuid())
-  teamId            String
-  caption           String    @db.Text
-  platforms         Json      @default("[]")
-  mediaUrls         Json      @default("[]")
-  variantATime      DateTime
-  variantBTime      DateTime
+  id                 String   @id @default(cuid())
+  teamId             String
+  caption            String   @db.Text
+  platforms          Json     @default("[]")
+  mediaUrls          Json     @default("[]")
+  variantATime       DateTime
+  variantBTime       DateTime
   variantAEngagement Int      @default(0)
   variantBEngagement Int      @default(0)
-  variantAPostId    String?
-  variantBPostId    String?
-  winner            String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  team              Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  posts             Post[]
+  variantAPostId     String?
+  variantBPostId     String?
+  winner             String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  team               Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  posts              Post[]
+
   @@index([teamId])
 }
+
 model PlatformMetrics {
   id          String   @id @default(cuid())
   postId      String
   platform    String
-  reach       Int     @default(0)
-  impressions Int     @default(0)
-  likes       Int     @default(0)
-  comments    Int     @default(0)
-  shares      Int     @default(0)
+  reach       Int      @default(0)
+  impressions Int      @default(0)
+  likes       Int      @default(0)
+  comments    Int      @default(0)
+  shares      Int      @default(0)
   collectedAt DateTime @default(now())
+
+  @@unique([postId, platform])
   @@index([postId])
   @@index([collectedAt])
-  @@unique([postId, platform])
+}
+
+model AudienceDemographic {
+  id         String   @id @default(cuid())
+  teamId     String
+  platform   String
+  dimension  String
+  bucket     String
+  value      Float
+  recordedAt DateTime @default(now())
+  team       Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([teamId, platform])
+  @@index([recordedAt])
 }
 
 model PostPublishLog {
-  id              String    @id @default(cuid())
-  postId          String
+  id             String   @id @default(cuid())
+  postId         String
   platform       String
   publishedAt    DateTime @default(now())
   platformPostId String?
@@ -413,10 +677,321 @@ model PostPublishLog {
   error          String?  @db.Text
   attemptNumber  Int      @default(1)
   createdAt      DateTime @default(now())
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  post           Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@index([postId])
   @@index([platform])
   @@index([publishedAt])
   @@index([status])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  teamId    String
+  type      String
+  title     String
+  message   String   @db.Text
+  data      Json     @default("{}")
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([read])
+  @@index([createdAt])
+}
+
+model Goal {
+  id           String   @id @default(cuid())
+  teamId       String
+  title        String
+  description  String   @db.Text
+  targetMetric String
+  targetValue  Float
+  currentValue Float    @default(0)
+  platform     String?
+  deadline     DateTime
+  status       String   @default("active")
+  contentPlan  Json     @default("[]")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  team         Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([status])
+}
+
+model AgentSession {
+  id        String         @id @default(cuid())
+  teamId    String
+  title     String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  team      Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  messages  AgentMessage[]
+
+  @@index([teamId])
+}
+
+model AgentMessage {
+  id        String       @id @default(cuid())
+  sessionId String
+  role      String
+  content   String       @db.Text
+  toolCalls Json?
+  agentName String?
+  createdAt DateTime     @default(now())
+  session   AgentSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+// ─── Agency Pivot Models ────────────────────────────────────────────────────
+
+model BrandVoice {
+  id              String   @id @default(cuid())
+  teamId          String
+  name            String
+  description     String?
+  toneAttributes  Json     // { formality: 0-10, energy: 0-10, humor: 0-10, professionalism: 0-10 }
+  vocabulary      String[]
+  avoidPhrases    String[]
+  emojiUsage      String   // "frequent" | "moderate" | "minimal" | "none"
+  sentenceStyle   String   // "short" | "medium" | "long" | "varied"
+  trainingPosts   Json     // array of { platform, content, engagement }
+  embeddingVector Float[]
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  team            Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+}
+
+model ContentStrategy {
+  id             String   @id @default(cuid())
+  teamId         String
+  name           String
+  startDate      DateTime
+  endDate        DateTime
+  contentMix     Json     // { educational: 60, promotional: 30, trending: 10 }
+  pillars        Json     // array of { topic, percentage, examples }
+  goals          Json     // { followers: 1000, engagement_rate: 5, leads: 50 }
+  platforms      String[]
+  postingCadence Json     // { instagram: "daily", x: "3x_daily", linkedin: "weekly" }
+  campaignPlan   Json     // array of { name, dates, theme, posts_count }
+  status         String   @default("active") // active | completed | paused
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  team           Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+}
+
+model VerticalProfile {
+  id                  String   @id @default(cuid())
+  slug                String   @unique // "d2c", "b2b", "restaurant", "real_estate", "coach", "creator", "generic"
+  name                String
+  description         String
+  contentPriorities   Json     // { showcases: 30, education: 40, promotion: 30 }
+  promptOverrides     Json     // industry-specific LLM instructions
+  templateLibrary     Json     // pre-built post templates
+  recommendedHashtags String[]
+  optimalPostingTimes Json     // { instagram: ["9:00", "13:00", "20:00"] }
+  createdAt           DateTime @default(now())
+}
+
+model TrendSignal {
+  id         String   @id @default(cuid())
+  platform   String   // "x", "instagram", "tiktok"
+  signalType String   // "hashtag", "audio", "topic", "format"
+  value      String
+  metadata   Json
+  popularity Int
+  velocity   Float
+  category   String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([platform, signalType])
+  @@index([expiresAt])
+}
+
+model EngagementAction {
+  id             String   @id @default(cuid())
+  teamId         String
+  platform       String
+  postId         String?
+  commentId      String?
+  dmThreadId     String?
+  actionType     String   // "comment_reply", "dm_reply", "like", "follow_back"
+  triggerContent String   @db.Text
+  agentResponse  String   @db.Text
+  sentiment      String   // "positive", "neutral", "negative"
+  intent         String?  // "buyer_inquiry", "support", "compliment", "complaint"
+  status         String   // "pending", "sent", "failed", "approved", "rejected"
+  brandVoiceId   String?
+  approvedBy     String?
+  createdAt      DateTime @default(now())
+  team           Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([status])
+}
+
+model AgentRole {
+  id           String   @id @default(cuid())
+  slug         String   @unique // "strategist", "copywriter", "designer", "analyst", "engagement_manager"
+  name         String
+  description  String
+  systemPrompt String   @db.Text
+  llmModel     String   // "groq:llama-3.3-70b-versatile", "anthropic:claude-haiku-4-5"
+  toolset      String[]
+  createdAt    DateTime @default(now())
+}
+
+model AgentRunLog {
+  id           String   @id @default(cuid())
+  teamId       String
+  agentRole    String
+  triggerType  String   // "scheduled", "manual", "trend", "engagement"
+  input        Json
+  output       Json
+  tokensUsed   Int
+  costInr      Float
+  durationMs   Int
+  status       String   // "success", "failed"
+  errorMessage String?
+  createdAt    DateTime @default(now())
+  team         Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, agentRole])
+}
+
+// ─── AI Marketing Agency MVP Models ──────────────────────────────────────────
+
+model BrandVoiceProfile {
+  id              String   @id @default(cuid())
+  teamId          String
+  name            String
+  isDefault       Boolean  @default(false)
+  primaryColor    String
+  brandLight      String
+  brandDark       String
+  lightBg         String
+  lightBorder     String
+  darkBg          String
+  fontPrimary     String
+  fontSecondary   String?
+  toneDimensions  Json
+  vocabularyBank  Json
+  emojiPatterns   Json
+  sentencePatterns Json
+  hashtagStyle    Json
+  embeddingVector Float[]
+  sampleCount     Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  team            Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  carousels       Carousel[]
+
+  @@index([teamId])
+  @@index([teamId, isDefault])
+}
+
+model Carousel {
+  id                  String            @id @default(cuid())
+  teamId              String
+  brandVoiceProfileId String
+  title               String
+  topic               String
+  slideCount          Int
+  slides              Json
+  htmlSource          String            @db.Text
+  pngUrls             String[]
+  pdfUrl              String?
+  status              String            @default("draft")
+  postId              String?
+  generationCostUsd   Float?
+  createdAt           DateTime          @default(now())
+  team                Team              @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  brandVoiceProfile   BrandVoiceProfile @relation(fields: [brandVoiceProfileId], references: [id])
+
+  @@index([teamId])
+  @@index([teamId, status])
+}
+
+model CompetitorTrack {
+  id              String           @id @default(cuid())
+  teamId          String
+  platform        String
+  handle          String
+  competitorName  String?
+  isActive        Boolean          @default(true)
+  lastScannedAt   DateTime?
+  scanFrequency   String           @default("daily")
+  metricsSnapshot Json
+  team            Team             @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  posts           CompetitorPost[]
+
+  @@unique([teamId, platform, handle])
+  @@index([teamId, isActive])
+}
+
+model CompetitorPost {
+  id             String          @id @default(cuid())
+  competitorId   String
+  platform       String
+  externalId     String
+  url            String
+  caption        String          @db.Text
+  mediaUrls      String[]
+  likes          Int
+  comments       Int
+  shares         Int
+  engagementRate Float
+  hashtags       String[]
+  postType       String
+  postedAt       DateTime
+  scrapedAt      DateTime        @default(now())
+  competitor     CompetitorTrack @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@unique([competitorId, externalId])
+  @@index([competitorId, postedAt])
+}
+
+model PostMetrics {
+  id            String   @id @default(cuid())
+  postId        String
+  platform      String
+  impressions   Int      @default(0)
+  reach         Int      @default(0)
+  engagement    Int      @default(0)
+  likes         Int      @default(0)
+  comments      Int      @default(0)
+  shares        Int      @default(0)
+  saves         Int      @default(0)
+  clicks        Int      @default(0)
+  profileVisits Int      @default(0)
+  follows       Int      @default(0)
+  revenue       Float?
+  bookings      Int?
+  capturedAt    DateTime @default(now())
+
+  @@index([postId, capturedAt])
+}
+
+model Report {
+  id              String   @id @default(cuid())
+  teamId          String
+  type            String
+  periodStart     DateTime
+  periodEnd       DateTime
+  data            Json
+  insights        Json
+  recommendations Json
+  generatedAt     DateTime @default(now())
+  team            Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId, type, periodStart])
 }

@@ -12,13 +12,9 @@ export class GoogleOauthStrategy extends PassportStrategy(Strategy, 'google') {
       process.env.GOOGLE_CALLBACK_URL ??
       `${process.env.BACKEND_URL ?? 'http://localhost:3001'}/auth/google/callback`;
 
-    if (!clientID || !clientSecret) {
-      throw new Error('Google OAuth credentials are not configured');
-    }
-
     super({
-      clientID,
-      clientSecret,
+      clientID: clientID || 'placeholder',
+      clientSecret: clientSecret || 'placeholder',
       callbackURL,
       scope: ['email', 'profile'],
     });

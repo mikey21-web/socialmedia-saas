@@ -6,6 +6,10 @@ import { PlatformsService } from '../platforms/platforms.service';
 import { EmailService } from '../email/email.service';
 import { createPublishingActivities } from '../publishing/activities';
 import { createAnalyticsActivities } from '../analytics/activities';
+import { createAgencyTemporalActivities } from './activities';
+import { AgencyOrchestratorService } from '../agency/orchestrator/agency-orchestrator.service';
+import { TrendMonitorService } from '../agency/trends/trend-monitor.service';
+import { AnalystService } from '../agency/specialists/analyst/analyst.service';
 
 async function runWorker() {
   process.env.DISABLE_NEST_SCHEDULER = 'true';
@@ -13,6 +17,9 @@ async function runWorker() {
   const prisma = app.get(PrismaService);
   const platformsService = app.get(PlatformsService);
   const emailService = app.get(EmailService);
+  const orchestrator = app.get(AgencyOrchestratorService);
+  const trendMonitor = app.get(TrendMonitorService);
+  const analyst = app.get(AnalystService);
 
   const connection = await NativeConnection.connect({
     address: process.env.TEMPORAL_SERVER_URL ?? 'localhost:7233',
@@ -22,10 +29,11 @@ async function runWorker() {
     connection,
     namespace: process.env.TEMPORAL_NAMESPACE ?? 'default',
     taskQueue: process.env.TEMPORAL_TASK_QUEUE ?? 'posts-queue',
-    workflowsPath: require.resolve('../publishing/workflows'),
+    workflowsPath: require.resolve('../workflows'),
     activities: {
       ...createPublishingActivities(prisma, platformsService, emailService),
       ...createAnalyticsActivities(prisma, platformsService),
+      ...createAgencyTemporalActivities(prisma, orchestrator, trendMonitor, analyst),
     },
   });
 

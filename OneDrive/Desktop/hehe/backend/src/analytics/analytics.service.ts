@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PLATFORM_BENCHMARKS } from './benchmarks';
 
 @Injectable()
 export class AnalyticsService {
@@ -51,6 +52,7 @@ export class AnalyticsService {
       likes: number;
       comments: number;
       shares: number;
+      saves: number;
       reach: number;
       engagements: number;
     }>();
@@ -87,6 +89,7 @@ export class AnalyticsService {
           likes: 0,
           comments: 0,
           shares: 0,
+          saves: 0,
           reach: 0,
           engagements: 0,
         };
@@ -108,6 +111,10 @@ export class AnalyticsService {
           platformEntry.shares += event.count;
           platformEntry.engagements += event.count;
           topEntry.engagements += event.count;
+        } else if (normalizedMetric === 'saves') {
+          platformEntry.saves += event.count;
+          platformEntry.engagements += event.count;
+          topEntry.engagements += event.count;
         } else if (normalizedMetric === 'engagements') {
           platformEntry.engagements += event.count;
           topEntry.engagements += event.count;
@@ -120,7 +127,7 @@ export class AnalyticsService {
         if (normalizedMetric === 'impressions') {
           dayEntry.impressions += event.count;
         }
-        if (normalizedMetric === 'engagements' || normalizedMetric === 'likes' || normalizedMetric === 'comments' || normalizedMetric === 'shares') {
+        if (normalizedMetric === 'engagements' || normalizedMetric === 'likes' || normalizedMetric === 'comments' || normalizedMetric === 'shares' || normalizedMetric === 'saves') {
           dayEntry.engagements += event.count;
         }
         byDayMap.set(date, dayEntry);
@@ -142,11 +149,13 @@ export class AnalyticsService {
     const totalImpressions = byPlatform.reduce((sum, item) => sum + item.impressions, 0);
     const totalReach = byPlatform.reduce((sum, item) => sum + item.reach, 0);
     const totalEngagements = byPlatform.reduce((sum, item) => sum + item.engagements, 0);
+    const totalSaves = byPlatform.reduce((sum, item) => sum + item.saves, 0);
 
     return {
       totalImpressions,
       totalEngagements,
       totalReach,
+      totalSaves,
       byPlatform: byPlatform.map(({ reach: _reach, engagements: _engagements, ...item }) => item),
       byDay: Array.from(byDayMap.values()).sort((a, b) => a.date.localeCompare(b.date)),
       byDayPlatform: Array.from(byDayPlatformMap.values()).sort((a, b) =>
@@ -506,8 +515,20 @@ export class AnalyticsService {
     if (normalized === 'share' || normalized === 'shares' || normalized === 'retweet' || normalized === 'retweets') {
       return 'shares';
     }
+    if (normalized === 'save' || normalized === 'saves') {
+      return 'saves';
+    }
     if (normalized === 'engagement' || normalized === 'engagements') {
       return 'engagements';
+    }
+    if (normalized === 'watch_time' || normalized === 'average_view_duration') {
+      return 'watch_time';
+    }
+    if (normalized === 'completion_rate') {
+      return 'completion_rate';
+    }
+    if (normalized === 'play_count' || normalized === 'video_views') {
+      return 'video_views';
     }
     return null;
   }
@@ -621,6 +642,406 @@ export class AnalyticsService {
     }
 
     return bestTimes;
+  }
+
+  async getFollowerGrowth(teamId: string, from?: Date, to?: Date) {
+    const range = this.resolveDateRange(from?.toISOString(), to?.toISOString());
+    const snapshots = await this.prisma.followerSnapshot.findMany({
+      where: {
+        teamId,
+        recordedAt: { gte: range.from, lte: range.to },
+      },
+      orderBy: { recordedAt: 'asc' },
+    });
+
+    const byDate = new Map<string, Record<string, number | string>>();
+    const earliestByPlatform = new Map<string, number>();
+    const latestByPlatform: Record<string, number> = {};
+
+    for (const snapshot of snapshots) {
+      const date = snapshot.recordedAt.toISOString().slice(0, 10);
+      const entry = byDate.get(date) ?? { date };
+      entry[snapshot.platform] = snapshot.count;
+      byDate.set(date, entry);
+
+      if (!earliestByPlatform.has(snapshot.platform)) {
+        earliestByPlatform.set(snapshot.platform, snapshot.count);
+      }
+      latestByPlatform[snapshot.platform] = snapshot.count;
+    }
+
+    const growthByPlatform: Record<string, number> = {};
+    for (const [platform, latest] of Object.entries(latestByPlatform)) {
+      growthByPlatform[platform] = latest - (earliestByPlatform.get(platform) ?? latest);
+    }
+
+    return {
+      series: Array.from(byDate.values()).sort((a, b) => String(a.date).localeCompare(String(b.date))),
+      latestByPlatform,
+      growthByPlatform,
+    };
+  }
+
+  async recordFollowerSnapshot(teamId: string, platform: string, count: number) {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const existing = await this.prisma.followerSnapshot.findFirst({
+      where: {
+        teamId,
+        platform,
+        recordedAt: { gte: startOfToday },
+      },
+      orderBy: { recordedAt: 'desc' },
+      select: { id: true },
+    });
+
+    if (existing) {
+      return this.prisma.followerSnapshot.update({
+        where: { id: existing.id },
+        data: { count },
+      });
+    }
+
+    return this.prisma.followerSnapshot.create({
+      data: { teamId, platform, count },
+    });
+  }
+
+  async getVideoMetrics(teamId: string, from?: Date, to?: Date) {
+    const range = this.resolveDateRange(from?.toISOString(), to?.toISOString());
+    const videoPlatforms = ['tiktok', 'youtube', 'instagram'];
+    const posts = await this.prisma.post.findMany({
+      where: {
+        teamId,
+        deletedAt: null,
+        status: 'published',
+        platforms: { some: { platform: { in: videoPlatforms } } },
+      },
+      include: {
+        platforms: { select: { platform: true } },
+        analytics: {
+          where: { collectedAt: { gte: range.from, lte: range.to } },
+          select: { eventType: true, count: true },
+        },
+      },
+    });
+
+    const platformStats = new Map<string, {
+      platform: string;
+      totalVideoViews: number;
+      watchTime: number;
+      completionRate: number;
+      totalSaves: number;
+      posts: number;
+    }>();
+    const topVideos = new Map<string, {
+      postId: string;
+      title: string;
+      platform: string;
+      videoViews: number;
+      saves: number;
+      completionRate: number;
+    }>();
+
+    for (const post of posts) {
+      const platforms = post.platforms
+        .map((item) => item.platform)
+        .filter((platform) => videoPlatforms.includes(platform));
+
+      for (const platform of platforms) {
+        const stats = platformStats.get(platform) ?? {
+          platform,
+          totalVideoViews: 0,
+          watchTime: 0,
+          completionRate: 0,
+          totalSaves: 0,
+          posts: 0,
+        };
+        const topEntry = topVideos.get(`${post.id}:${platform}`) ?? {
+          postId: post.id,
+          title: post.title,
+          platform,
+          videoViews: 0,
+          saves: 0,
+          completionRate: 0,
+        };
+
+        for (const event of post.analytics) {
+          const parsed = this.parseEventType(event.eventType, platform);
+          if (parsed.platform !== platform) {
+            continue;
+          }
+          const metric = this.normalizeMetric(parsed.metric);
+          if (metric === 'video_views') {
+            stats.totalVideoViews += event.count;
+            topEntry.videoViews += event.count;
+          }
+          if (metric === 'watch_time') {
+            stats.watchTime += event.count;
+          }
+          if (metric === 'completion_rate') {
+            stats.completionRate += event.count;
+            topEntry.completionRate += event.count;
+          }
+          if (metric === 'saves') {
+            stats.totalSaves += event.count;
+            topEntry.saves += event.count;
+          }
+        }
+
+        stats.posts += 1;
+        platformStats.set(platform, stats);
+        topVideos.set(`${post.id}:${platform}`, topEntry);
+      }
+    }
+
+    return {
+      byPlatform: Array.from(platformStats.values()).map((item) => ({
+        platform: item.platform,
+        totalVideoViews: item.totalVideoViews,
+        avgWatchTime: item.posts > 0 ? item.watchTime / item.posts : 0,
+        avgCompletionRate: item.posts > 0 ? item.completionRate / item.posts : 0,
+        totalSaves: item.totalSaves,
+      })),
+      topVideosByViews: Array.from(topVideos.values())
+        .sort((a, b) => b.videoViews - a.videoViews)
+        .slice(0, 5),
+    };
+  }
+
+  async getPostingHeatmap(teamId: string) {
+    const since = new Date();
+    since.setDate(since.getDate() - 90);
+
+    const posts = await this.prisma.post.findMany({
+      where: {
+        teamId,
+        deletedAt: null,
+        status: 'published',
+        scheduledAt: { gte: since },
+      },
+      include: {
+        analytics: { select: { eventType: true, count: true } },
+      },
+    });
+
+    const buckets = Array.from({ length: 7 }, () =>
+      Array.from({ length: 24 }, () => ({ sum: 0, count: 0 })),
+    );
+
+    for (const post of posts) {
+      if (!post.scheduledAt) {
+        continue;
+      }
+      const scheduledAt = new Date(post.scheduledAt);
+      const dow = scheduledAt.getDay();
+      const hour = scheduledAt.getHours();
+      const engagement = post.analytics.reduce((sum, event) => {
+        const metric = this.normalizeMetric(event.eventType.split(':')[1] || event.eventType);
+        return metric === 'engagements' || metric === 'likes' || metric === 'comments' || metric === 'shares'
+          ? sum + event.count
+          : sum;
+      }, 0);
+      buckets[dow][hour].sum += engagement;
+      buckets[dow][hour].count += 1;
+    }
+
+    const cells: Array<{ dow: number; hour: number; value: number }> = [];
+    for (let dow = 0; dow < 7; dow += 1) {
+      for (let hour = 0; hour < 24; hour += 1) {
+        const bucket = buckets[dow][hour];
+        cells.push({
+          dow,
+          hour,
+          value: bucket.count > 0 ? bucket.sum / bucket.count : 0,
+        });
+      }
+    }
+
+    const maxValue = cells.reduce((max, cell) => Math.max(max, cell.value), 0);
+    return {
+      cells,
+      maxValue,
+      bestSlots: [...cells].sort((a, b) => b.value - a.value).slice(0, 5),
+    };
+  }
+
+  async getEngagementBenchmarks(teamId: string, from?: Date, to?: Date) {
+    const roi = await this.getPlatformROI(teamId, from, to);
+    return roi
+      .filter((item) => PLATFORM_BENCHMARKS[item.platform])
+      .map((item) => {
+        const benchmark = PLATFORM_BENCHMARKS[item.platform];
+        const yourRate = item.impressions > 0 ? (item.engagements / item.impressions) * 100 : 0;
+        const rating = yourRate >= benchmark.goodEngagementRate
+          ? 'excellent'
+          : yourRate >= benchmark.avgEngagementRate * 1.5
+            ? 'good'
+            : yourRate >= benchmark.avgEngagementRate
+              ? 'average'
+              : 'below';
+
+        return {
+          platform: item.platform,
+          yourRate,
+          industryAvg: benchmark.avgEngagementRate,
+          goodThreshold: benchmark.goodEngagementRate,
+          rating,
+        };
+      });
+  }
+
+  async getViralityScores(teamId: string, from?: Date, to?: Date) {
+    const range = this.resolveDateRange(from?.toISOString(), to?.toISOString());
+    const posts = await this.prisma.post.findMany({
+      where: {
+        teamId,
+        deletedAt: null,
+        status: 'published',
+      },
+      include: {
+        platforms: { select: { platform: true } },
+        analytics: {
+          where: { collectedAt: { gte: range.from, lte: range.to } },
+          select: { eventType: true, count: true },
+        },
+      },
+    });
+
+    const topViralPosts: Array<{
+      postId: string;
+      title: string;
+      platform: string;
+      viralityScore: number;
+      shares: number;
+      comments: number;
+      impressions: number;
+    }> = [];
+    const platformTotals = new Map<string, { sum: number; count: number }>();
+
+    for (const post of posts) {
+      const platform = post.platforms[0]?.platform ?? 'unknown';
+      let shares = 0;
+      let comments = 0;
+      let impressions = 0;
+
+      for (const event of post.analytics) {
+        const metric = this.normalizeMetric(event.eventType.split(':')[1] || event.eventType);
+        if (metric === 'shares') shares += event.count;
+        if (metric === 'comments') comments += event.count;
+        if (metric === 'impressions') impressions += event.count;
+      }
+
+      const score = ((shares + comments * 0.5) / Math.max(impressions, 1)) * 100;
+      const viralityScore = Number(score.toFixed(2));
+      topViralPosts.push({
+        postId: post.id,
+        title: post.title,
+        platform,
+        viralityScore,
+        shares,
+        comments,
+        impressions,
+      });
+
+      const totals = platformTotals.get(platform) ?? { sum: 0, count: 0 };
+      totals.sum += viralityScore;
+      totals.count += 1;
+      platformTotals.set(platform, totals);
+    }
+
+    return {
+      topViralPosts: topViralPosts.sort((a, b) => b.viralityScore - a.viralityScore).slice(0, 10),
+      avgViralityByPlatform: Array.from(platformTotals.entries()).map(([platform, totals]) => ({
+        platform,
+        avgVirality: totals.count > 0 ? totals.sum / totals.count : 0,
+      })),
+    };
+  }
+
+  async getDemographics(teamId: string, platform?: string) {
+    const rows = await this.prisma.audienceDemographic.findMany({
+      where: {
+        teamId,
+        platform,
+      },
+      orderBy: { recordedAt: 'desc' },
+    }) as Array<{ platform: string; dimension: string; bucket: string; value: number; recordedAt: Date }>;
+
+    const selectedPlatform = platform ?? rows[0]?.platform ?? '';
+    const latestByDimension = new Map<string, Date>();
+    for (const row of rows) {
+      if (row.platform !== selectedPlatform) {
+        continue;
+      }
+      if (!latestByDimension.has(row.dimension)) {
+        latestByDimension.set(row.dimension, row.recordedAt);
+      }
+    }
+
+    const grouped = {
+      age: [] as Array<{ bucket: string; value: number }>,
+      gender: [] as Array<{ bucket: string; value: number }>,
+      country: [] as Array<{ bucket: string; value: number }>,
+      city: [] as Array<{ bucket: string; value: number }>,
+    };
+    let recordedAt: Date | null = null;
+
+    for (const row of rows) {
+      const latest = latestByDimension.get(row.dimension);
+      if (row.platform !== selectedPlatform || !latest || row.recordedAt.getTime() !== latest.getTime()) {
+        continue;
+      }
+      if (row.dimension === 'age' || row.dimension === 'gender' || row.dimension === 'country' || row.dimension === 'city') {
+        grouped[row.dimension].push({ bucket: row.bucket, value: row.value });
+        if (!recordedAt || row.recordedAt.getTime() > recordedAt.getTime()) {
+          recordedAt = row.recordedAt;
+        }
+      }
+    }
+
+    return {
+      platform: selectedPlatform,
+      age: grouped.age,
+      gender: grouped.gender,
+      country: grouped.country.sort((a, b) => b.value - a.value).slice(0, 5),
+      city: grouped.city.sort((a, b) => b.value - a.value).slice(0, 5),
+      recordedAt: recordedAt?.toISOString() ?? null,
+    };
+  }
+
+  async upsertDemographics(
+    teamId: string,
+    platform: string,
+    dimension: string,
+    buckets: Array<{ bucket: string; value: number }>,
+  ) {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    await this.prisma.audienceDemographic.deleteMany({
+      where: {
+        teamId,
+        platform,
+        dimension,
+        recordedAt: { gte: startOfToday },
+      },
+    });
+
+    if (!buckets.length) {
+      return { count: 0 };
+    }
+
+    return this.prisma.audienceDemographic.createMany({
+      data: buckets.map((bucket) => ({
+        teamId,
+        platform,
+        dimension,
+        bucket: bucket.bucket,
+        value: bucket.value,
+      })),
+    });
   }
 
   async predictEngagement(caption: string, platform: string, brandProfile?: any): Promise<{ predictedEngagement: number; confidence: string; tips: string[] }> {

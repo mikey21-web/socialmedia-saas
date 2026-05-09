@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { ThemeProvider } from "next-themes";
 import { SessionExpiryProvider } from "@/components/session-expiry-provider";
 import "./globals.css";
+import "../bones/registry";
 
 export const metadata: Metadata = {
   title: "Postiz — Social Media Scheduling",

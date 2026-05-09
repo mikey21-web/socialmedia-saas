@@ -19,7 +19,7 @@ export class LlmService implements LLMClient {
   private readonly defaultModel = 'llama-3.3-70b-versatile';
 
   constructor() {
-    this.client = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    this.client = new Groq({ apiKey: process.env.GROQ_API_KEY || 'placeholder' });
   }
 
   async complete(prompt: string, opts?: LLMOptions): Promise<string> {

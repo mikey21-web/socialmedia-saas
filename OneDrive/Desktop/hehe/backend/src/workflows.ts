@@ -1,3 +1,9 @@
 export { publishPostWorkflow } from './publishing/workflows/publish.workflow';
 export { tokenRefreshWorkflow } from './publishing/workflows/token-refresh.workflow';
 export { collectAnalyticsWorkflow } from './analytics/workflows/collect.workflow';
+export { dailyCycleWorkflow } from './temporal/workflows/daily-cycle.workflow';
+export { trendMonitorWorkflow } from './temporal/workflows/trend-monitor.workflow';
+export { engagementPollWorkflow } from './temporal/workflows/engagement-poll.workflow';
+export { reportGenerationWorkflow } from './temporal/workflows/report-generation.workflow';
+export { competitorScanWorkflow } from './temporal/workflows/competitor-scan.workflow';
+export { metricsCollectionWorkflow } from './temporal/workflows/metrics-collection.workflow';

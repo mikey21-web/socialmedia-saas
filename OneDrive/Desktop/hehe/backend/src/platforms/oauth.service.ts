@@ -1,10 +1,9 @@
-import { BadRequestException, Inject, Injectable, Logger, Optional } from '@nestjs/common';
-import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'crypto';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
-import type { Redis } from 'ioredis';
-import { REDIS_CLIENT } from '../common/redis.provider';
 import { PlatformsService } from './platforms.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../redis/redis.service';
 
 type OAuthPlatform = 'x' | 'instagram' | 'linkedin' | 'facebook' | 'youtube' | 'tiktok';
 
@@ -24,19 +23,17 @@ type FacebookPage = {
   picture?: { data?: { url?: string } };
 };
 
-const FIVE_MINUTES_MS = 5 * 60 * 1000;
 const GRAPH = 'https://graph.facebook.com/v20.0';
 
 @Injectable()
 export class OauthService {
   private readonly logger = new Logger(OauthService.name);
-  private readonly fallbackStates = new Map<string, OAuthStateEntry>();
 
   constructor(
     private readonly platformsService: PlatformsService,
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
-    @Optional() @Inject(REDIS_CLIENT) private readonly redis: Redis | null,
+    private readonly redis: RedisService,
   ) {}
 
   async getAuthorizeUrl(platform: string, userId: string, teamId?: string) {
@@ -464,15 +461,7 @@ export class OauthService {
   }
 
   private async storeOAuthState(state: string, entry: OAuthStateEntry) {
-    if (this.redis) {
-      await this.redis.set(`oauth:${state}`, JSON.stringify(entry), 'EX', 300);
-    } else {
-      this.fallbackStates.set(state, entry);
-      const now = Date.now();
-      for (const [k, v] of this.fallbackStates.entries()) {
-        if (now - v.createdAt > FIVE_MINUTES_MS) this.fallbackStates.delete(k);
-      }
-    }
+    await this.redis.set(`oauth:${state}`, JSON.stringify(entry), 600);
   }
 
   private async getOAuthState(state: string): Promise<OAuthStateEntry | null> {
@@ -482,25 +471,13 @@ export class OauthService {
       return { ...decoded, codeVerifier, createdAt: Date.now() };
     }
 
-    if (this.redis) {
-      const json = await this.redis.get(`oauth:${state}`);
-      return json ? (JSON.parse(json) as OAuthStateEntry) : null;
-    }
-    const entry = this.fallbackStates.get(state);
-    if (!entry) return null;
-    if (Date.now() - entry.createdAt > FIVE_MINUTES_MS) {
-      this.fallbackStates.delete(state);
-      return null;
-    }
-    return entry;
+    const json = await this.redis.get(`oauth:${state}`);
+    return json ? (JSON.parse(json) as OAuthStateEntry) : null;
   }
 
   private async deleteOAuthState(state: string) {
-    if (this.redis) {
-      await this.redis.del(`oauth:${state}`);
-    } else {
-      this.fallbackStates.delete(state);
-    }
+    await this.redis.del(`oauth:${state}`);
+    await this.redis.del(`pkce:${state}`);
   }
 
   async refreshTokenIfExpired(credentialId: string) {
@@ -641,24 +618,11 @@ export class OauthService {
   }
 
   private async storeCodeVerifier(state: string, codeVerifier: string) {
-    if (this.redis) {
-      await this.redis.set(`oauth:pkce:${state}`, codeVerifier, 'EX', 600);
-      return;
-    }
-    this.fallbackStates.set(`pkce:${state}`, {
-      userId: '',
-      platform: 'x',
-      codeVerifier,
-      createdAt: Date.now(),
-    });
+    await this.redis.set(`pkce:${state}`, codeVerifier, 600);
   }
 
   private async getCodeVerifier(state: string) {
-    if (this.redis) {
-      return await this.redis.get(`oauth:pkce:${state}`) ?? undefined;
-    }
-    const entry = this.fallbackStates.get(`pkce:${state}`);
-    return entry?.codeVerifier;
+    return await this.redis.get(`pkce:${state}`) ?? undefined;
   }
 
   private getEncryptionKey() {

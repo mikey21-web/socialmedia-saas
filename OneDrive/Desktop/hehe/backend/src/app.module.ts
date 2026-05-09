@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import Redis from 'ioredis';
 import { SentryModule } from '@sentry/nestjs/setup';
+import { envValidationSchema } from './config/env.validation';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
 import { CommentsModule } from './comments/comments.module';
@@ -28,10 +30,24 @@ import { AdminModule } from './admin/admin.module';
 import { BrandModule } from './brand/brand.module';
 import { InboxModule } from './inbox/inbox.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { AgencyModule } from './agency/agency.module';
+import { BrandVoiceModule } from './brand-voice/brand-voice.module';
+import { CarouselModule } from './carousel/carousel.module';
+import { HumanizerModule } from './ai/humanizer/humanizer.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
 import { HealthController } from './health.controller';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validationSchema: envValidationSchema,
+      validationOptions: {
+        abortEarly: false,
+      },
+    }),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRootAsync({
       useFactory: () => {
@@ -47,6 +63,7 @@ import { HealthController } from './health.controller';
       },
     }),
     SentryModule.forRoot(),
+    RedisModule,
     PrismaModule,
     TemporalModule,
     AuthModule,
@@ -68,6 +85,12 @@ import { HealthController } from './health.controller';
     AgentsModule,
     InboxModule,
     RecommendationsModule,
+    NotificationsModule,
+    AgencyModule,
+    BrandVoiceModule,
+    CarouselModule,
+    HumanizerModule,
+    OnboardingModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }, RedisProvider],

@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TemporalClientService } from '../temporal/client';
+import { FacebookPublisher } from './publishers/facebook.publisher';
+import { InstagramPublisher } from './publishers/instagram.publisher';
 import { LinkedinPublisher } from './publishers/linkedin.publisher';
 import { TwitterPublisher } from './publishers/twitter.publisher';
 import { publishPostWorkflow } from './workflows/publish.workflow';
@@ -14,6 +16,8 @@ export class PublishingService {
     private readonly temporalClient: TemporalClientService,
     private readonly twitterPublisher: TwitterPublisher,
     private readonly linkedinPublisher: LinkedinPublisher,
+    private readonly instagramPublisher: InstagramPublisher,
+    private readonly facebookPublisher: FacebookPublisher,
   ) {}
 
 async startPublishWorkflow(postId: string, teamId: string, scheduledAt?: Date) {
@@ -74,7 +78,11 @@ async startPublishWorkflow(postId: string, teamId: string, scheduledAt?: Date) {
           ? await this.twitterPublisher.publish(post.id, credential.id)
           : normalizedPlatform === 'linkedin'
             ? await this.linkedinPublisher.publish(post.id, credential.id)
-            : null;
+            : normalizedPlatform === 'instagram'
+              ? await this.instagramPublisher.publish(post.id, credential.id)
+              : normalizedPlatform === 'facebook'
+                ? await this.facebookPublisher.publish(post.id, credential.id)
+                : null;
 
         if (!published) {
           throw new Error(`${platform.platform} publisher is not implemented`);

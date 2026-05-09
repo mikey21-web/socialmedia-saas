@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Skeleton } from "boneyard-js/react";
 import { format, parseISO } from "date-fns";
 import { ChevronLeft, ChevronRight, Calendar, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -314,7 +315,8 @@ export default function CalendarPage() {
   };
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <Skeleton name="calendar-page" loading={loading}>
+      <div className="space-y-6 p-4 md:p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-xl font-semibold">Content Calendar</h1>
@@ -421,6 +423,7 @@ export default function CalendarPage() {
         defaultDate={selectedDate?.slice(0, 16) || undefined}
         onSuccess={() => fetchPosts()}
       />
-    </div>
+      </div>
+    </Skeleton>
   );
 }

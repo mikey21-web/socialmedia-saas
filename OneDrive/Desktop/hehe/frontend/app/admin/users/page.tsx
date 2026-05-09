@@ -1,56 +1,62 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { api } from "@/lib/api";
+import { useEffect, useState } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 
-type User = {
+interface User {
   id: string;
   email: string;
-  name: string | null;
-  role: string;
-  suspended: boolean;
+  team: string;
+  plan: 'free' | 'pro';
   createdAt: string;
-};
+  lastActive: string;
+}
 
-export default function AdminUsersPage() {
+export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
-
-  async function load() {
-    const response = await api.get<{ users: User[] }>("/api/admin/users");
-    setUsers(response.data.users);
-  }
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    queueMicrotask(() => {
-      void load();
-    });
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/users`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('jwt_token')}` },
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        setUsers(data);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
 
-  async function suspend(id: string) {
-    await api.post(`/api/admin/users/${id}/suspend`);
-    await load();
-  }
-
   return (
-    <div className="space-y-4 p-4 md:p-6">
-      <h1 className="text-xl font-semibold">Users</h1>
-      <Card className="divide-y divide-border">
-        {users.map((user) => (
-          <div key={user.id} className="grid gap-3 p-3 text-sm sm:grid-cols-[1fr_100px_100px_auto] sm:items-center">
-            <div className="min-w-0">
-              <p className="truncate font-medium">{user.name ?? user.email}</p>
-              <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-            </div>
-            <span className="capitalize">{user.role}</span>
-            <span>{user.suspended ? "Suspended" : "Active"}</span>
-            <Button variant="destructive" disabled={user.suspended} onClick={() => suspend(user.id)}>
-              Suspend
-            </Button>
-          </div>
-        ))}
-      </Card>
+    <div className="p-6 bg-gray-950 min-h-screen">
+      <h1 className="text-3xl font-bold mb-6">User Management</h1>
+
+      <div className="space-y-3">
+        {loading ? (
+          <div>Loading...</div>
+        ) : (
+          users.map((user) => (
+            <Card key={user.id} className="bg-gray-900 border-gray-800">
+              <CardContent className="pt-6 flex justify-between items-center">
+                <div>
+                  <p className="font-semibold">{user.email}</p>
+                  <p className="text-sm text-gray-500">{user.team}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Badge className={user.plan === 'pro' ? 'bg-green-600' : 'bg-gray-600'}>
+                    {user.plan}
+                  </Badge>
+                  <p className="text-sm text-gray-500">
+                    Last active: {new Date(user.lastActive).toLocaleDateString()}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
     </div>
   );
 }

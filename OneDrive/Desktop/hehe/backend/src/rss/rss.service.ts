@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import Parser from 'rss-parser';
+import { assertSsrfSafe } from '../common/ssrf-guard';
 import { PrismaService } from '../prisma/prisma.service';
 
 type CreateRssSourceDto = {
@@ -25,12 +26,52 @@ type FeedItemSummary = {
 @Injectable()
 export class RssService {
   private readonly logger = new Logger(RssService.name);
+  private readonly MAX_FEED_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
+
   private readonly parser = new Parser();
 
   constructor(private readonly prisma: PrismaService) {}
 
   async fetchFeed(url: string): Promise<FeedItemSummary[]> {
-    const feed = await this.parser.parseURL(url);
+    await assertSsrfSafe(url);
+
+    // Fetch with a 50 MB size cap before handing off to rss-parser
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new BadRequestException(`Failed to fetch RSS feed: HTTP ${response.status}`);
+    }
+
+    const contentLength = response.headers.get('content-length');
+    if (contentLength && parseInt(contentLength, 10) > this.MAX_FEED_SIZE_BYTES) {
+      throw new BadRequestException(
+        `RSS feed exceeds 50 MB size limit (content-length: ${contentLength})`,
+      );
+    }
+
+    // Stream response body and abort if it exceeds the cap
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new BadRequestException('RSS feed response has no body');
+    }
+
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        totalBytes += value.length;
+        if (totalBytes > this.MAX_FEED_SIZE_BYTES) {
+          reader.cancel().catch(() => undefined);
+          throw new BadRequestException('RSS feed exceeds the 50 MB size limit');
+        }
+        chunks.push(value);
+      }
+    }
+
+    const xmlString = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString('utf8');
+    const feed = await this.parser.parseString(xmlString);
     return (feed.items ?? [])
       .map((item) => ({
         title: item.title?.trim() || 'Untitled RSS item',

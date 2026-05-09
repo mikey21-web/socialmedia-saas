@@ -2,9 +2,11 @@ import { Module } from '@nestjs/common';
 import { InboxController } from './inbox.controller';
 import { InboxService } from './inbox.service';
 import { ApprovalModule } from '../approval/approval.module';
+import { TeamsModule } from '../teams/teams.module';
+import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-  imports: [ApprovalModule],
+  imports: [ApprovalModule, TeamsModule, PrismaModule],
   controllers: [InboxController],
   providers: [InboxService],
   exports: [InboxService],

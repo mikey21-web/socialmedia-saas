@@ -7,6 +7,8 @@ import { PostsImportController } from "./import.controller";
 import { PostsImportService } from "./import.service";
 import { AbTestController } from "./ab-test.controller";
 import { AbTestService } from "./ab-test.service";
+import { PlanLimitGuard } from "../common/guards/plan-limit.guard";
+import { PrismaModule } from "../prisma/prisma.module";
 import { TeamsModule } from "../teams/teams.module";
 
 @Module({
@@ -15,10 +17,11 @@ import { TeamsModule } from "../teams/teams.module";
       storage: memoryStorage(),
       limits: { fileSize: 50 * 1024 * 1024 },
     }),
+    PrismaModule,
     TeamsModule,
   ],
   controllers: [PostsController, PostsImportController, AbTestController],
-  providers: [PostsService, PostsImportService, AbTestService],
+  providers: [PostsService, PostsImportService, AbTestService, PlanLimitGuard],
   exports: [PostsService],
 })
 export class PostsModule {}

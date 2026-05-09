@@ -16,7 +16,7 @@ import { JwtStrategy } from './jwt.strategy';
     PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? 'dev-secret-change-in-prod',
-      signOptions: { expiresIn: (process.env.JWT_EXPIRY ?? '24h') as StringValue },
+      signOptions: { expiresIn: (process.env.JWT_EXPIRY ?? '7d') as StringValue },
     }),
     PrismaModule,
     EmailModule,

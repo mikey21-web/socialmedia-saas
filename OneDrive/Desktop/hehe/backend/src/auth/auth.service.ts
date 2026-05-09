@@ -231,7 +231,7 @@ export class AuthService {
         role,
       },
       {
-        expiresIn: (process.env.JWT_EXPIRY ?? '24h') as StringValue,
+        expiresIn: (process.env.JWT_EXPIRY ?? '7d') as StringValue,
       },
     );
   }
@@ -250,7 +250,7 @@ export class AuthService {
       },
       {
         secret: refreshSecret,
-        expiresIn: (process.env.REFRESH_TOKEN_EXPIRY ?? '7d') as StringValue,
+        expiresIn: (process.env.REFRESH_TOKEN_EXPIRY ?? '30d') as StringValue,
       },
     );
   }

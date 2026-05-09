@@ -16,19 +16,21 @@ import { JwtAuthGuard } from '../auth/jwt.guard';
 import { TeamId } from '../common/decorators/team.decorator';
 import { SubscriptionFeatureLimit } from '../common/decorators/subscription-feature.decorator';
 import { SubscriptionGuard } from '../common/guards/subscription.guard';
+import { PlanLimit, PlanLimitGuard } from '../common/guards/plan-limit.guard';
 import { PostsService } from './posts.service';
 import { AuthenticatedRequestUser } from '../common/interfaces/authenticated-request-user.interface';
 import { CreatePostDto } from './dto/create-post.dto';
 import { ListPostsDto } from './dto/list-posts.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 
-@UseGuards(JwtAuthGuard, SubscriptionGuard)
+@UseGuards(JwtAuthGuard, SubscriptionGuard, PlanLimitGuard)
 @Controller('posts')
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
 
   @Post()
   @SubscriptionFeatureLimit('posts')
+  @PlanLimit('posts')
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   createPost(
     @Req() req: { user: AuthenticatedRequestUser },
