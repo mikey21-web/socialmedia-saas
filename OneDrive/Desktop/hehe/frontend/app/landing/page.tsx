@@ -402,10 +402,10 @@ export default function LandingPage() {
             <div>
               <h4 className="font-semibold mb-4">Resources</h4>
               <ul className="space-y-3 text-sm text-muted-foreground">
-                <li><Link href="#" className="hover:text-foreground transition-colors">Blog</Link></li>
-                <li><Link href="#" className="hover:text-foreground transition-colors">Case Studies</Link></li>
-                <li><Link href="#" className="hover:text-foreground transition-colors">Help Center</Link></li>
-                <li><Link href="#" className="hover:text-foreground transition-colors">API Docs</Link></li>
+                <li><Link href="/case-studies/salon" className="hover:text-foreground transition-colors">Case Study: Salon</Link></li>
+                <li><Link href="/case-studies/restaurant" className="hover:text-foreground transition-colors">Case Study: Restaurant</Link></li>
+                <li><Link href="/case-studies/real-estate" className="hover:text-foreground transition-colors">Case Study: Real Estate</Link></li>
+                <li><Link href="/refund" className="hover:text-foreground transition-colors">Refund Policy</Link></li>
               </ul>
             </div>
             
@@ -421,11 +421,11 @@ export default function LandingPage() {
           </div>
           
           <div className="pt-8 border-t border-border/40 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
-            <p>© {new Date().getFullYear()} Diyaa AI Inc. All rights reserved.</p>
+            <p>© {new Date().getFullYear()} Diyaa AI. All rights reserved.</p>
             <div className="flex items-center gap-6">
-              <Link href="#" className="hover:text-foreground transition-colors">Privacy Policy</Link>
-              <Link href="#" className="hover:text-foreground transition-colors">Terms of Service</Link>
-              <Link href="#" className="hover:text-foreground transition-colors">Cookie Policy</Link>
+              <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
+              <Link href="/terms" className="hover:text-foreground transition-colors">Terms of Service</Link>
+              <Link href="/refund" className="hover:text-foreground transition-colors">Refund Policy</Link>
             </div>
           </div>
         </div>
