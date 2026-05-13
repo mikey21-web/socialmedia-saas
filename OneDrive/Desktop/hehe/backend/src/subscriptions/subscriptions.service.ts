@@ -577,14 +577,24 @@ export class SubscriptionsService {
       };
     }
 
+    const meteredLimits = limits as {
+      postsPerMonth: number;
+      platformsPerAccount: number;
+      teamMembers: number;
+      aiRunsPerDay: number;
+      carouselsPerMonth: number;
+      reportsPerWeek: number;
+      brandVoiceProfiles: number;
+    };
+
     return {
-      posts: { current: usage.postsUsedThisMonth, max: limits.postsPerMonth },
-      platforms: { current: usage.platformsConnected, max: limits.platformsPerAccount },
-      members: { current: usage.memberCount, max: limits.teamMembers },
-      aiRuns: { current: usage.aiRunsToday ?? 0, max: limits.aiRunsPerDay },
-      carousels: { current: usage.carouselsThisMonth ?? 0, max: limits.carouselsPerMonth },
-      reports: { current: usage.reportsThisWeek ?? 0, max: limits.reportsPerWeek },
-      brandVoiceProfiles: { current: usage.brandVoiceProfiles ?? 0, max: limits.brandVoiceProfiles },
+      posts: { current: usage.postsUsedThisMonth, max: meteredLimits.postsPerMonth },
+      platforms: { current: usage.platformsConnected, max: meteredLimits.platformsPerAccount },
+      members: { current: usage.memberCount, max: meteredLimits.teamMembers },
+      aiRuns: { current: usage.aiRunsToday ?? 0, max: meteredLimits.aiRunsPerDay },
+      carousels: { current: usage.carouselsThisMonth ?? 0, max: meteredLimits.carouselsPerMonth },
+      reports: { current: usage.reportsThisWeek ?? 0, max: meteredLimits.reportsPerWeek },
+      brandVoiceProfiles: { current: usage.brandVoiceProfiles ?? 0, max: meteredLimits.brandVoiceProfiles },
     };
   }
 }

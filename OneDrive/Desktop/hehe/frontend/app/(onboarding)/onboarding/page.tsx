@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 const STEPS = [
+  { id: 0, label: "Auto-Setup", path: "/onboarding/step-0" },
   { id: 1, label: "Welcome", path: "/onboarding/step-1" },
   { id: 2, label: "Business", path: "/onboarding/step-2" },
   { id: 3, label: "Accounts", path: "/onboarding/step-3" },

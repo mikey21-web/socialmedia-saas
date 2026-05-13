@@ -1,21 +1,51 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { BarChart2 } from 'lucide-react';
 import { useDashboardStore } from '@/stores/dashboardStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { LoadingState } from '@/components/ui/loading-state';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ErrorState } from '@/components/ui/error-state';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function AnalyticsPage() {
   const { metrics, isLoading, fetchMetrics } = useDashboardStore();
   const [dateRange, setDateRange] = useState('7d');
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    fetchMetrics(dateRange);
+    setError(null);
+    fetchMetrics(dateRange).catch((err: Error) => setError(err));
   }, [dateRange, fetchMetrics]);
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6 p-6">
+        <h1 className="text-3xl font-bold">Analytics</h1>
+        <LoadingState message="Loading analytics..." />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-6 p-6">
+        <h1 className="text-3xl font-bold">Analytics</h1>
+        <ErrorState
+          title="Could not load analytics"
+          message={error.message}
+          onRetry={() => fetchMetrics(dateRange)}
+        />
+      </div>
+    );
+  }
+
+  const hasData = metrics && (metrics.totalImpressions > 0 || metrics.totalEngagements > 0);
+
   return (
-    <div className="space-y-6 p-6 bg-gray-950 min-h-screen">
+    <div className="space-y-6 p-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Analytics</h1>
         <div className="flex gap-2">
@@ -23,6 +53,7 @@ export default function AnalyticsPage() {
             <Button
               key={range}
               variant={dateRange === range ? 'default' : 'outline'}
+              size="sm"
               onClick={() => setDateRange(range)}
             >
               {range}
@@ -31,12 +62,15 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
-      {isLoading ? (
-        <div>Loading...</div>
+      {!hasData ? (
+        <EmptyState
+          icon={BarChart2}
+          title="No analytics data yet"
+          description="Once your posts go live, performance metrics will appear here."
+        />
       ) : (
         <>
-          {/* Metrics Overview */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <MetricCard
               title="Total Impressions"
               value={metrics?.totalImpressions || 0}
@@ -59,53 +93,44 @@ export default function AnalyticsPage() {
             />
           </div>
 
-          {/* Trend Chart */}
-          <Card className="bg-gray-900 border-gray-800">
+          <Card>
             <CardHeader>
               <CardTitle>Weekly Trend</CardTitle>
             </CardHeader>
             <CardContent>
-              {metrics?.weeklyTrend && (
+              {metrics?.weeklyTrend && metrics.weeklyTrend.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={metrics.weeklyTrend}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#444" />
+                    <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="date" />
                     <YAxis />
                     <Tooltip />
-                    <Line
-                      type="monotone"
-                      dataKey="value"
-                      stroke="#00ff88"
-                      dot={false}
-                    />
+                    <Line type="monotone" dataKey="value" stroke="#22c55e" dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-8">No trend data for this period</p>
               )}
             </CardContent>
           </Card>
 
-          {/* Top Post */}
           {metrics?.topPost && (
-            <Card className="bg-gray-900 border-gray-800">
+            <Card>
               <CardHeader>
                 <CardTitle>Top Performing Post</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-gray-400 mb-2">
+                <p className="text-sm text-muted-foreground mb-2">
                   {metrics.topPost.content.substring(0, 100)}...
                 </p>
-                <div className="grid grid-cols-4 gap-2 text-sm">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
                   <div>
-                    <p className="text-gray-500">Impressions</p>
-                    <p className="font-semibold">
-                      {metrics.topPost.metrics?.impressions || 0}
-                    </p>
+                    <p className="text-muted-foreground">Impressions</p>
+                    <p className="font-semibold">{metrics.topPost.metrics?.impressions || 0}</p>
                   </div>
                   <div>
-                    <p className="text-gray-500">Engagements</p>
-                    <p className="font-semibold">
-                      {metrics.topPost.metrics?.engagements || 0}
-                    </p>
+                    <p className="text-muted-foreground">Engagements</p>
+                    <p className="font-semibold">{metrics.topPost.metrics?.engagements || 0}</p>
                   </div>
                 </div>
               </CardContent>
@@ -127,11 +152,11 @@ function MetricCard({
   trend: string;
 }) {
   return (
-    <Card className="bg-gray-900 border-gray-800">
+    <Card>
       <CardContent className="pt-6">
-        <p className="text-sm text-gray-500">{title}</p>
+        <p className="text-sm text-muted-foreground">{title}</p>
         <p className="text-2xl font-bold mt-2">{value}</p>
-        <p className="text-xs text-green-400 mt-1">{trend}</p>
+        <p className="text-xs text-emerald-500 mt-1">{trend}</p>
       </CardContent>
     </Card>
   );

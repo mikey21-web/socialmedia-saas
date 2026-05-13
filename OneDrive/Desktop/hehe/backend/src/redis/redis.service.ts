@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import { Redis } from '@upstash/redis';
 
 @Injectable()
-export class RedisService {
+export class RedisService implements OnModuleDestroy {
   private readonly client: Redis;
 
   constructor() {
@@ -22,5 +22,9 @@ export class RedisService {
 
   async del(key: string): Promise<void> {
     await this.client.del(key);
+  }
+
+  async onModuleDestroy() {
+    await this.client.quit();
   }
 }

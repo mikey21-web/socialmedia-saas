@@ -5,10 +5,11 @@ import { BrandVoiceService } from './brand-voice.service';
 import { BrandVoiceExtractorService } from './brand-voice-extractor.service';
 import { PaletteBuilderService } from './palette-builder.service';
 import { BrandVoiceProfileController } from './brand-voice.controller';
+import { VisualDirectionsController } from './visual-directions.controller';
 
 @Module({
   imports: [PrismaModule, LlmModule],
-  controllers: [BrandVoiceProfileController],
+  controllers: [BrandVoiceProfileController, VisualDirectionsController],
   providers: [BrandVoiceService, BrandVoiceExtractorService, PaletteBuilderService],
   exports: [BrandVoiceService, PaletteBuilderService],
 })

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -78,6 +78,10 @@ export class AuthService {
 
     if (!user || !isPasswordValid) {
       throw new BadRequestException('Invalid credentials');
+    }
+
+    if (user.suspended) {
+      throw new UnauthorizedException('Account suspended');
     }
 
     const membership = await this.prisma.teamMember.findFirst({
@@ -174,6 +178,18 @@ export class AuthService {
       }
       throw new BadRequestException('Invalid Google token');
     }
+  }
+
+  async generateTokens(user: { id: string; email: string; name?: string | null }) {
+    const team = await this.ensureUserTeam(user.id, user.email, user.name ?? null);
+    const tokens = await this.issueTokens(user.id, user.email, team.id);
+
+    return {
+      accessToken: tokens.token,
+      refreshToken: tokens.refreshToken,
+      token: tokens.token,
+      team_id: team.id,
+    };
   }
 
   async refreshAccessToken(refreshToken: string): Promise<AuthPayload> {

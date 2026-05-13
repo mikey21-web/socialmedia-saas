@@ -1,46 +1,55 @@
 import { BrandContext } from '../../../brand/brand.service';
-import { Angle } from '../types';
+import { Angle, EnrichedContext } from '../types';
+import { getHooksForPlatform, formatHooksForPrompt } from '../hooks/hook-library';
 
-export function buildLinkedinPrompt(angle: Angle, brand: BrandContext): string {
-  return `You are writing a LinkedIn post for ${brand.brandName}.
+export function buildLinkedinPrompt(angle: Angle, brand: BrandContext, enriched?: EnrichedContext): string {
+  const hooks = getHooksForPlatform('linkedin', 4);
+  const competitorContext = enriched?.competitorInsights
+    ?.filter(c => c.platform === 'linkedin')
+    .map(c => `@${c.handle}: focuses on ${c.topTopics.slice(0, 2).join(', ')} | weakness: ${c.weaknesses[0] ?? 'generic content'}`)
+    .slice(0, 2) ?? [];
 
-BRAND VOICE:
-- Tone: ${brand.voice.tone}
-- Traits: ${brand.voice.traits.join(', ')}
-- Formality: ${brand.voice.formality}/10
-- Always use words like: ${brand.voice.alwaysWords.join(', ') || 'none specified'}
-- NEVER use these words: ${brand.voice.neverWords.join(', ') || 'none specified'}
-- Emoji usage: ${brand.voice.emojiUsage}
-- Hashtag style: ${brand.voice.hashtagStyle}
+  return `You are writing a LinkedIn post that gets people to click "see more" and leave a comment. You write like a founder sharing hard-won lessons, not like a content marketer.
 
-AUDIENCE:
-- Age: ${brand.audience.age}
-- Interests: ${brand.audience.interests.join(', ')}
-- Pain points: ${brand.audience.painPoints.join(', ')}
+BRAND: ${brand.brandName} (${brand.industry})
+VOICE: ${brand.voice.tone} | Formality: ${brand.voice.formality}/10
+TRAITS: ${brand.voice.traits.join(', ')}
+MUST USE: ${brand.voice.alwaysWords.join(', ') || 'none'}
+NEVER USE: ${brand.voice.neverWords.join(', ') || 'none'}
 
-EXAMPLES OF OUR VOICE (match this energy):
-${brand.voiceExamples.slice(0, 5).map((e, i) => `${i + 1}. "${e.content}"`).join('\n') || 'No examples provided yet.'}
+AUDIENCE: ${brand.audience.age} professionals
+THEY CARE ABOUT: ${brand.audience.interests.join(', ')}
+THEIR FRUSTRATION: ${brand.audience.painPoints.join(', ')}
 
-ANGLE TO WRITE ABOUT:
-Pillar: ${angle.pillar}
-Angle: ${angle.angle}
+${brand.voiceExamples.length ? `MATCH THIS VOICE:\n${brand.voiceExamples.slice(0, 3).map((e, i) => `${i + 1}. "${e.content}"`).join('\n')}` : ''}
+
+THE ANGLE:
+"${angle.angle}"
+Hook format: ${angle.hookFormat || 'vulnerable or contrarian'}
+Specific detail: ${angle.specificDetails || 'include a real lesson or number'}
+
+${competitorContext.length ? `COMPETITORS ON LINKEDIN (differentiate from them):\n${competitorContext.join('\n')}` : ''}
+
+HOOK TEMPLATES:
+${formatHooksForPrompt(hooks)}
 
 LINKEDIN RULES:
 - STRICT: fullCaption MUST be 300 characters or fewer
-- Start with a bold hook line (makes people click "see more")
-- Personal or thought-leadership angle
-- Professional yet human tone — no emojis
-- 1 hashtag max
-- End with a question or discussion prompt for engagement
-- Use line breaks for readability
-- 200-300 chars total
+- First line MUST make them click "see more" — bold claim, vulnerable confession, or surprising stat
+- Write in first person. "I" not "We" (unless it's a team story)
+- Short paragraphs. One idea per line. White space matters.
+- End with a QUESTION that people actually want to answer (not "What do you think?" — that's lazy)
+- 1 hashtag max (LinkedIn algorithm doesn't favor more)
+- NO emojis (unless brand voice explicitly says otherwise)
+- NO: "I'm excited to announce", "Thrilled to share", "In the ever-evolving landscape"
+- Sound like a real person sharing a real experience, not a brand posting content
 
 OUTPUT JSON ONLY:
 {
-  "hook": "first line",
-  "body": "main post content",
-  "cta": "engagement question or call to action",
-  "hashtags": ["tag1"],
-  "fullCaption": "complete assembled post (300 chars max)"
+  "hook": "the bold first line that triggers 'see more'",
+  "body": "the story/lesson (short paragraphs, first person)",
+  "cta": "a specific question people want to answer",
+  "hashtags": ["onetag"],
+  "fullCaption": "complete post (300 chars max)"
 }`;
 }

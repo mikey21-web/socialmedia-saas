@@ -48,7 +48,8 @@ export class TeamsService {
       this.subscriptionsService.getTeamPlan(teamId),
     ]);
 
-    if (plan === 'free' && memberCount >= 2) {
+    const planName = plan as string;
+    if ((planName === 'free' || planName === 'solo') && memberCount >= 2) {
       throw new ForbiddenException({
         code: 'UPGRADE_REQUIRED',
         limit: 'members',

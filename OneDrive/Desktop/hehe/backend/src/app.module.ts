@@ -12,6 +12,9 @@ import { AuthModule } from './auth/auth.module';
 import { CommentsModule } from './comments/comments.module';
 import { RedisProvider } from './common/redis.provider';
 import { AppThrottlerGuard } from './common/guards/app-throttler.guard';
+import { CommonModule } from './common/common.module';
+import { MetricsModule } from './common/metrics/metrics.module';
+import { CacheModule } from './common/cache/cache.module';
 import { MediaModule } from './media/media.module';
 import { PlatformsModule } from './platforms/platforms.module';
 import { PublishingModule } from './publishing/publishing.module';
@@ -63,6 +66,9 @@ import { RedisModule } from './redis/redis.module';
       },
     }),
     SentryModule.forRoot(),
+    CommonModule,
+    MetricsModule,
+    CacheModule,
     RedisModule,
     PrismaModule,
     TemporalModule,

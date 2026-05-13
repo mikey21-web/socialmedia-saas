@@ -44,7 +44,7 @@ describe('EmailService', () => {
     expect(sgMail.send).toHaveBeenCalledWith(expect.objectContaining({
       to: 'user@example.com',
       from: 'hello@example.com',
-      subject: 'Welcome to Team <One>',
+      subject: 'Welcome to Diyaa AI — let\'s get started',
       html: expect.stringContaining('Team &lt;One&gt;'),
     }));
   });

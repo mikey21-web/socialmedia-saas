@@ -3,8 +3,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BrandVoiceService } from '../brand-voice/brand-voice.service';
 import { LlmService } from '../agents/llm/llm.service';
 import { HumanizerService } from '../ai/humanizer/humanizer.service';
+import { CritiqueService } from '../ai/critique/critique.service';
 import { HtmlGeneratorService } from './html-generator.service';
 import { PlaywrightExporterService } from './playwright-exporter.service';
+import { R2StorageService } from '../media/r2-storage.service';
 
 describe('CarouselService', () => {
   const profile = {
@@ -29,7 +31,13 @@ describe('CarouselService', () => {
         })),
         findFirst: jest.fn(),
         findMany: jest.fn(),
-        update: jest.fn(),
+        update: jest.fn(async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => ({
+          id: where.id,
+          status: 'ready',
+          slideCount: 5,
+          htmlSource: '<main class="carousel-deck"></main>',
+          ...data,
+        })),
       },
       brandVoiceProfile: {
         findFirst: jest.fn(),
@@ -60,9 +68,32 @@ describe('CarouselService', () => {
         finalAiScore: 5,
       })),
     };
+    const critique = {
+      critiqueAndRevise: jest.fn(async (content: string) => ({
+        finalContent: content,
+        passed: true,
+        critique: {
+          scores: [],
+          overall: 4,
+          failingDimensions: [],
+          passed: true,
+          summary: 'Passes.',
+        },
+        attempts: 1,
+      })),
+    };
     const html = new HtmlGeneratorService();
     const exporter = {
-      export: jest.fn(async () => ['data:image/svg+xml;base64,one', 'data:image/svg+xml;base64,two', 'data:image/svg+xml;base64,three', 'data:image/svg+xml;base64,four', 'data:image/svg+xml;base64,five']),
+      exportSlidesToBuffers: jest.fn(async () => [
+        Buffer.from('one'),
+        Buffer.from('two'),
+        Buffer.from('three'),
+        Buffer.from('four'),
+        Buffer.from('five'),
+      ]),
+    };
+    const r2Storage = {
+      upload: jest.fn(async (key: string) => `https://cdn.example.com/${key}`),
     };
 
     return {
@@ -71,17 +102,21 @@ describe('CarouselService', () => {
         brandVoice as unknown as BrandVoiceService,
         llm as unknown as LlmService,
         humanizer as unknown as HumanizerService,
+        critique as unknown as CritiqueService,
         html,
         exporter as unknown as PlaywrightExporterService,
+        r2Storage as unknown as R2StorageService,
       ),
       prisma,
       exporter,
       humanizer,
+      critique,
+      r2Storage,
     };
   }
 
   it('generates a ready carousel with humanized slides and export urls', async () => {
-    const { service, prisma, exporter, humanizer } = buildService();
+    const { service, prisma, exporter, humanizer, critique } = buildService();
 
     const result = await service.generateCarousel('team_1', {
       topic: 'Salon booking mistakes',
@@ -94,8 +129,17 @@ describe('CarouselService', () => {
     expect(result.pngUrls).toHaveLength(5);
     expect(String(result.htmlSource)).toContain('carousel-deck');
     expect(humanizer.humanize).toHaveBeenCalledTimes(5);
-    expect(exporter.export).toHaveBeenCalledWith(
-      expect.objectContaining({ teamId: 'team_1', slideCount: 5 }),
+    expect(critique.critiqueAndRevise).toHaveBeenCalledTimes(5);
+    expect(exporter.exportSlidesToBuffers).toHaveBeenCalledWith(expect.arrayContaining([expect.stringContaining('<section class="slide"')]));
+    expect(prisma.carousel.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'carousel_1' },
+        data: {
+          pngUrls: expect.arrayContaining([
+            'https://cdn.example.com/carousels/carousel_1/slide-1.png',
+          ]),
+        },
+      }),
     );
     expect(prisma.carousel.create).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -7,20 +7,22 @@ import { useAuthStore } from "@/store/auth";
 
 export default function GoogleAuthCallbackPage() {
   const router = useRouter();
-  const setToken = useAuthStore((state) => state.setToken);
+  const setTokens = useAuthStore((state) => state.setTokens);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const token = new URLSearchParams(window.location.search).get("token");
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    const refresh = params.get("refresh");
 
-    if (!token) {
+    if (!token || !refresh) {
       setError("Google sign-in failed. Please try again.");
       return;
     }
 
-    setToken(token);
+    setTokens({ accessToken: token, refreshToken: refresh });
     router.replace("/dashboard");
-  }, [router, setToken]);
+  }, [router, setTokens]);
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">

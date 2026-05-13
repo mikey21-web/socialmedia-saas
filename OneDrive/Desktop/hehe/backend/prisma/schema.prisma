@@ -14,6 +14,7 @@ model User {
   password         String
   refreshTokenHash String?
   role             String       @default("user")
+  picture          String?
   suspended        Boolean      @default(false)
   suspendedAt      DateTime?
   createdAt        DateTime     @default(now())
@@ -100,6 +101,11 @@ model Post {
   abTestId          String?
   abTestVariant     String?
   campaignId        String?
+  utmEnabled        Boolean          @default(false)
+  utmLinkId         String?
+  hookType          String?
+  contentFormat     String?
+  appliedInsights   Json?            @default("[]")
   reach             Int              @default(0)
   impressions       Int              @default(0)
   metricsUpdatedAt  DateTime?
@@ -120,6 +126,7 @@ model Post {
   @@index([postSetId])
   @@index([abTestId])
   @@index([campaignId])
+  @@index([status, scheduledAt, deletedAt])
 }
 
 model PostPlatform {
@@ -994,4 +1001,197 @@ model Report {
   team            Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   @@index([teamId, type, periodStart])
+}
+
+// ─── Priority Features: Auto-Onboarding ─────────────────────────────────────
+
+model WebsiteScrape {
+  id              String    @id @default(cuid())
+  teamId          String
+  url             String
+  status          String    @default("pending") // pending | scraping | completed | failed
+  scrapedData     Json      @default("{}") // { title, description, colors, fonts, tone, offers, testimonials }
+  brandSuggestions Json     @default("{}") // { brandName, industry, voiceTone, audienceAge, etc }
+  error           String?
+  createdAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  @@index([teamId])
+  @@map("website_scrape")
+}
+
+// ─── Priority Features: ROI Dashboard ───────────────────────────────────────
+
+model UtmLink {
+  id             String            @id @default(cuid())
+  teamId         String
+  postId         String?
+  platform       String
+  destinationUrl String
+  utmSource      String
+  utmMedium      String            @default("social")
+  utmCampaign    String?
+  utmContent     String?
+  shortUrl       String?
+  clicks         Int               @default(0)
+  conversions    Int               @default(0)
+  revenue        Float             @default(0)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  events         ConversionEvent[]
+
+  @@index([teamId])
+  @@index([postId])
+  @@index([shortUrl])
+  @@map("utm_link")
+}
+
+model ConversionEvent {
+  id        String   @id @default(cuid())
+  teamId    String
+  utmLinkId String?
+  postId    String?
+  eventType String   // click | signup | purchase | booking | lead
+  value     Float    @default(0)
+  currency  String   @default("INR")
+  metadata  Json     @default("{}")
+  sourceIp  String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  utmLink   UtmLink? @relation(fields: [utmLinkId], references: [id], onDelete: SetNull)
+
+  @@index([teamId])
+  @@index([utmLinkId])
+  @@index([postId])
+  @@index([createdAt])
+  @@map("conversion_event")
+}
+
+// ─── Priority Features: Competitor Counter-Posts ─────────────────────────────
+
+model CounterPost {
+  id               String   @id @default(cuid())
+  teamId           String
+  competitorPostId String
+  generatedContent String   @db.Text
+  platform         String
+  status           String   @default("draft") // draft | approved | published | rejected
+  postId           String?  // linked to actual Post if published
+  reasoning        String?  @db.Text
+  createdAt        DateTime @default(now())
+
+  @@index([teamId])
+  @@index([competitorPostId])
+  @@index([status])
+  @@map("counter_post")
+}
+
+// ─── Priority Features: Performance Learning Loop ───────────────────────────
+
+model PerformanceInsight {
+  id           String    @id @default(cuid())
+  teamId       String
+  insightType  String    // hook_type | posting_time | content_format | hashtag_strategy | cta_style
+  pattern      String    // "questions_in_hook" | "9am_posting" | "carousel_format"
+  confidence   Float     @default(0)
+  sampleSize   Int       @default(0)
+  multiplier   Float     @default(1.0) // engagement multiplier vs average
+  metadata     Json      @default("{}")
+  isActive     Boolean   @default(true)
+  appliedCount Int       @default(0)
+  lastAppliedAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([teamId, insightType, pattern])
+  @@index([teamId])
+  @@index([insightType])
+  @@map("performance_insight")
+}
+
+// ─── Priority Features: Video/Reel Pipeline ─────────────────────────────────
+
+model VideoProject {
+  id                  String   @id @default(cuid())
+  teamId              String
+  title               String
+  sourceVideoUrl      String
+  sourceVideoDuration Float?
+  status              String   @default("uploaded") // uploaded | processing | clips_ready | published | failed
+  outputFormats       Json     @default("[]") // [{ platform, aspectRatio, url }]
+  clips               Json     @default("[]") // [{ startTime, endTime, url, platform }]
+  captions            Json     @default("[]") // [{ startTime, endTime, text }]
+  suggestedHooks      Json     @default("[]") // ["hook1", "hook2"]
+  musicTrackId        String?
+  thumbnailUrl        String?
+  postId              String?
+  processingError     String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([teamId])
+  @@index([status])
+  @@map("video_project")
+}
+
+model MusicTrack {
+  id          String   @id @default(cuid())
+  title       String
+  artist      String?
+  genre       String
+  mood        String
+  duration    Float
+  url         String
+  licenseType String   @default("royalty_free")
+  bpm         Int?
+  tags        String[] @default([])
+  createdAt   DateTime @default(now())
+
+  @@index([genre, mood])
+  @@map("music_track")
+}
+
+// ─── Priority Features: White-Label Client Portal ───────────────────────────
+
+model ClientPortal {
+  id             String    @id @default(cuid())
+  agencyTeamId   String
+  clientTeamId   String
+  clientName     String
+  clientEmail    String?
+  clientLogo     String?
+  customDomain   String?
+  brandColor     String    @default("#2563eb")
+  accessToken    String    @unique
+  permissions    Json      @default("{\"viewPosts\": true, \"approvePosts\": true, \"viewAnalytics\": true}")
+  isActive       Boolean   @default(true)
+  lastAccessedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([agencyTeamId, clientTeamId])
+  @@index([agencyTeamId])
+  @@index([clientTeamId])
+  @@index([accessToken])
+  @@map("client_portal")
+}
+
+// ─── Priority Features: Bulk Onboarding ─────────────────────────────────────
+
+model BulkOnboardJob {
+  id               String    @id @default(cuid())
+  agencyTeamId     String
+  status           String    @default("pending") // pending | processing | completed | failed
+  totalClients     Int       @default(0)
+  processedClients Int       @default(0)
+  failedClients    Int       @default(0)
+  csvData          Json      @default("[]")
+  results          Json      @default("[]")
+  error            String?
+  createdAt        DateTime  @default(now())
+  completedAt      DateTime?
+
+  @@index([agencyTeamId])
+  @@index([status])
+  @@map("bulk_onboard_job")
 }

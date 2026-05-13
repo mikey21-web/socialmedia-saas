@@ -51,7 +51,7 @@ describe('MediaService', () => {
         buffer: Buffer.from('data'),
         size: 4,
       };
-      await expect(service.uploadToS3(file)).rejects.toThrow('S3 not configured');
+      await expect(service.uploadToS3(file)).rejects.toThrow('S3/R2 not configured');
     });
   });
 

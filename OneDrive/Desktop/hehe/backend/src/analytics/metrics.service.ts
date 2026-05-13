@@ -1,26 +1,33 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { PrismaService } from '../prisma/prisma.service';
+import { PlatformMetricsFetcher, PlatformPostMetrics } from './platform-metrics-fetcher.service';
 
-export interface PlatformMetrics {
-  reach?: number;
-  impressions?: number;
-  likes?: number;
-  comments?: number;
-  shares?: number;
-}
+export type PlatformMetrics = Omit<PlatformPostMetrics, 'platform'>;
 
+/**
+ * Refreshes published-post metrics from real platform APIs every 6 hours.
+ * Falls back to in-memory mock data if the fetcher is unavailable so dev/test
+ * environments still see realistic numbers.
+ */
 @Injectable()
 export class MetricsService {
   private readonly logger = new Logger(MetricsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly fetcher?: PlatformMetricsFetcher,
+  ) {}
 
   @Cron(CronExpression.EVERY_6_HOURS)
   async refreshAllMetrics(): Promise<void> {
     this.logger.log('Starting 6-hourly metrics refresh');
+    let processed = 0;
+    let succeeded = 0;
+    let failed = 0;
 
     const teams = await this.prisma.team.findMany({
+      where: { deletedAt: null },
       select: { id: true },
     });
 
@@ -34,22 +41,30 @@ export class MetricsService {
           },
           include: {
             platforms: {
-              where: {
-                platformPostId: { not: null },
-              },
+              where: { platformPostId: { not: null } },
             },
           },
+          take: 100,
+          orderBy: { scheduledAt: 'desc' },
         });
 
         for (const post of posts) {
           for (const platform of post.platforms) {
             if (!platform.platformPostId) continue;
-
+            processed++;
             try {
-              const metrics = await this.fetchPostMetrics(post.id);
+              const metrics = await this.fetchSinglePlatformMetrics(
+                platform.platform,
+                platform.platformPostId,
+                team.id,
+              );
               await this.recordMetrics(post.id, platform.platform, metrics);
+              succeeded++;
             } catch (err) {
-              this.logger.warn(`Failed to fetch metrics for post ${post.id} on ${platform.platform}: ${err}`);
+              failed++;
+              this.logger.warn(
+                `Failed to fetch metrics for post ${post.id} on ${platform.platform}: ${(err as Error)?.message}`,
+              );
             }
           }
         }
@@ -58,16 +73,17 @@ export class MetricsService {
       }
     }
 
-    this.logger.log('Metrics refresh complete');
+    this.logger.log(`Metrics refresh complete: ${succeeded} succeeded, ${failed} failed of ${processed}`);
   }
 
+  /**
+   * Fetch metrics for a single post across all platforms (used by manual refresh).
+   */
   async fetchPostMetrics(postId: string): Promise<PlatformMetrics> {
     const post = await this.prisma.post.findFirst({
       where: { id: postId },
       include: {
-        platforms: {
-          where: { platformPostId: { not: null } },
-        },
+        platforms: { where: { platformPostId: { not: null } } },
       },
     });
 
@@ -75,12 +91,7 @@ export class MetricsService {
       return {};
     }
 
-    const platformPostIds = post.platforms.map((p) => ({
-      platform: p.platform,
-      platformPostId: p.platformPostId!,
-    }));
-
-    let totalMetrics: PlatformMetrics = {
+    const totals: PlatformMetrics = {
       reach: 0,
       impressions: 0,
       likes: 0,
@@ -88,171 +99,97 @@ export class MetricsService {
       shares: 0,
     };
 
-    for (const { platform, platformPostId } of platformPostIds) {
-      let platformMetrics: PlatformMetrics;
-
-      switch (platform) {
-        case 'instagram':
-          platformMetrics = await this.fetchFromInstagram(postId, platformPostId);
-          break;
-        case 'twitter':
-          platformMetrics = await this.fetchFromTwitter(postId, platformPostId);
-          break;
-        case 'linkedin':
-          platformMetrics = await this.fetchFromLinkedIn(postId, platformPostId);
-          break;
-        case 'facebook':
-          platformMetrics = await this.fetchFromFacebook(postId, platformPostId);
-          break;
-        case 'tiktok':
-          platformMetrics = await this.fetchFromTikTok(postId, platformPostId);
-          break;
-        default:
-          this.logger.warn(`Unknown platform: ${platform}`);
-          platformMetrics = {};
-      }
-
-      totalMetrics.reach = (totalMetrics.reach ?? 0) + (platformMetrics.reach ?? 0);
-      totalMetrics.impressions = (totalMetrics.impressions ?? 0) + (platformMetrics.impressions ?? 0);
-      totalMetrics.likes = (totalMetrics.likes ?? 0) + (platformMetrics.likes ?? 0);
-      totalMetrics.comments = (totalMetrics.comments ?? 0) + (platformMetrics.comments ?? 0);
-      totalMetrics.shares = (totalMetrics.shares ?? 0) + (platformMetrics.shares ?? 0);
+    for (const platform of post.platforms) {
+      if (!platform.platformPostId) continue;
+      const m = await this.fetchSinglePlatformMetrics(
+        platform.platform,
+        platform.platformPostId,
+        post.teamId,
+      );
+      totals.reach = (totals.reach ?? 0) + (m.reach ?? 0);
+      totals.impressions = (totals.impressions ?? 0) + (m.impressions ?? 0);
+      totals.likes = (totals.likes ?? 0) + (m.likes ?? 0);
+      totals.comments = (totals.comments ?? 0) + (m.comments ?? 0);
+      totals.shares = (totals.shares ?? 0) + (m.shares ?? 0);
     }
 
-    return totalMetrics;
+    return totals;
   }
 
   async recordMetrics(postId: string, platform: string, metrics: PlatformMetrics): Promise<void> {
     const events: Array<{ postId: string; eventType: string; count: number }> = [];
 
-    if (metrics.reach !== undefined) {
-      events.push({
-        postId,
-        eventType: `${platform}:reach`,
-        count: metrics.reach,
-      });
-    }
-    if (metrics.impressions !== undefined) {
-      events.push({
-        postId,
-        eventType: `${platform}:impressions`,
-        count: metrics.impressions,
-      });
-    }
-    if (metrics.likes !== undefined) {
-      events.push({
-        postId,
-        eventType: `${platform}:likes`,
-        count: metrics.likes,
-      });
-    }
-    if (metrics.comments !== undefined) {
-      events.push({
-        postId,
-        eventType: `${platform}:comments`,
-        count: metrics.comments,
-      });
-    }
-    if (metrics.shares !== undefined) {
-      events.push({
-        postId,
-        eventType: `${platform}:shares`,
-        count: metrics.shares,
-      });
+    const fields: Array<[keyof PlatformMetrics, string]> = [
+      ['reach', 'reach'],
+      ['impressions', 'impressions'],
+      ['likes', 'likes'],
+      ['comments', 'comments'],
+      ['shares', 'shares'],
+      ['saves', 'saves'],
+      ['clicks', 'clicks'],
+      ['videoViews', 'video_views'],
+      ['watchTime', 'watch_time'],
+    ];
+
+    for (const [key, eventType] of fields) {
+      const value = metrics[key];
+      if (typeof value === 'number') {
+        events.push({ postId, eventType: `${platform}:${eventType}`, count: value });
+      }
     }
 
-    if (events.length > 0) {
-      await this.prisma.$transaction(async (tx) => {
-        for (const event of events) {
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          await tx.analyticsEvent.deleteMany({
-            where: {
-              postId: event.postId,
-              eventType: event.eventType,
-              collectedAt: { gte: today },
-            },
-          });
-          await tx.analyticsEvent.create({ data: event });
-        }
+    if (events.length === 0) return;
 
-        const post = await tx.post.findUnique({ where: { id: postId } });
-        if (post && (metrics.reach !== undefined || metrics.impressions !== undefined)) {
-          await tx.post.update({
-            where: { id: postId },
-            data: {
-              reach: metrics.reach ?? post.reach,
-              impressions: metrics.impressions ?? post.impressions,
-              metricsUpdatedAt: new Date(),
-            },
-          });
-        }
-      });
-    }
+    await this.prisma.$transaction(async (tx) => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      for (const event of events) {
+        await tx.analyticsEvent.deleteMany({
+          where: {
+            postId: event.postId,
+            eventType: event.eventType,
+            collectedAt: { gte: today },
+          },
+        });
+        await tx.analyticsEvent.create({ data: event });
+      }
+
+      const post = await tx.post.findUnique({ where: { id: postId } });
+      if (post && (metrics.reach !== undefined || metrics.impressions !== undefined)) {
+        await tx.post.update({
+          where: { id: postId },
+          data: {
+            reach: metrics.reach ?? post.reach,
+            impressions: metrics.impressions ?? post.impressions,
+            metricsUpdatedAt: new Date(),
+          },
+        });
+      }
+    });
   }
 
-  private async fetchFromInstagram(_postId: string, _platformPostId: string): Promise<PlatformMetrics> {
-    this.logger.warn('Using mock metrics for instagram - real API not configured');
-    const mockReach = Math.floor(Math.random() * 1000);
-    const mockImpressions = Math.floor(mockReach * (2 + Math.random() * 2));
-    return {
-      reach: mockReach,
-      impressions: mockImpressions,
-      likes: Math.floor(mockReach * 0.1),
-      comments: Math.floor(mockReach * 0.02),
-      shares: Math.floor(mockReach * 0.01),
-    };
+  private async fetchSinglePlatformMetrics(
+    platform: string,
+    platformPostId: string,
+    teamId: string,
+  ): Promise<PlatformMetrics> {
+    if (this.fetcher) {
+      const result = await this.fetcher.fetchMetrics(platform, platformPostId, teamId);
+      return result;
+    }
+    // Fallback for environments where fetcher isn't injected (tests, init order)
+    return this.mockMetricsForPlatform(platform);
   }
 
-  private async fetchFromTwitter(_postId: string, _platformPostId: string): Promise<PlatformMetrics> {
-    this.logger.warn('Using mock metrics for twitter - real API not configured');
-    const mockImpressions = Math.floor(Math.random() * 800 + 200);
-    const mockReach = Math.floor(mockImpressions * 0.6);
+  private mockMetricsForPlatform(platform: string): PlatformMetrics {
+    this.logger.warn(`Using mock metrics for ${platform} (PlatformMetricsFetcher not available)`);
+    const reach = Math.floor(Math.random() * 1000) + 100;
     return {
-      reach: mockReach,
-      impressions: mockImpressions,
-      likes: Math.floor(mockImpressions * 0.05),
-      comments: Math.floor(mockImpressions * 0.01),
-      shares: Math.floor(mockImpressions * 0.02),
-    };
-  }
-
-  private async fetchFromLinkedIn(_postId: string, _platformPostId: string): Promise<PlatformMetrics> {
-    this.logger.warn('Using mock metrics for linkedin - real API not configured');
-    const mockImpressions = Math.floor(Math.random() * 600 + 100);
-    const mockReach = Math.floor(mockImpressions * 0.7);
-    return {
-      reach: mockReach,
-      impressions: mockImpressions,
-      likes: Math.floor(mockImpressions * 0.04),
-      comments: Math.floor(mockImpressions * 0.02),
-      shares: Math.floor(mockImpressions * 0.01),
-    };
-  }
-
-  private async fetchFromFacebook(_postId: string, _platformPostId: string): Promise<PlatformMetrics> {
-    this.logger.warn('Using mock metrics for facebook - real API not configured');
-    const mockReach = Math.floor(Math.random() * 500 + 50);
-    const mockImpressions = Math.floor(mockReach * 1.5);
-    return {
-      reach: mockReach,
-      impressions: mockImpressions,
-      likes: Math.floor(mockImpressions * 0.03),
-      comments: Math.floor(mockImpressions * 0.01),
-      shares: Math.floor(mockImpressions * 0.005),
-    };
-  }
-
-  private async fetchFromTikTok(_postId: string, _platformPostId: string): Promise<PlatformMetrics> {
-    this.logger.warn('Using mock metrics for tiktok - real API not configured');
-    const mockReach = Math.floor(Math.random() * 2000 + 100);
-    const mockImpressions = Math.floor(mockReach * 3);
-    return {
-      reach: mockReach,
-      impressions: mockImpressions,
-      likes: Math.floor(mockImpressions * 0.08),
-      comments: Math.floor(mockImpressions * 0.03),
-      shares: Math.floor(mockImpressions * 0.02),
+      reach,
+      impressions: Math.floor(reach * 1.8),
+      likes: Math.floor(reach * 0.06),
+      comments: Math.floor(reach * 0.015),
+      shares: Math.floor(reach * 0.01),
     };
   }
 }

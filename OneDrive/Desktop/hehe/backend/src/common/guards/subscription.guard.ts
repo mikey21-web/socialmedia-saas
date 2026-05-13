@@ -32,28 +32,28 @@ export class SubscriptionGuard implements CanActivate {
     }
 
     const plan = await this.teamsService.getTeamPlan(teamId);
-    if (plan === 'pro') {
+    if (plan === 'pro' || plan === 'agency' || plan === 'enterprise') {
       return true;
     }
 
     if (feature === 'posts') {
       const count = await this.teamsService.getMonthlyScheduledPostCount(teamId);
-      if (count >= 10) {
-        throw this.upgradeRequired('posts', count, 10);
+      if (count >= 30) {
+        throw this.upgradeRequired('posts', count, 30);
       }
     }
 
     if (feature === 'platforms') {
       const count = await this.teamsService.getPlatformCredentialCount(teamId);
-      if (count >= 3) {
-        throw this.upgradeRequired('platforms', count, 3);
+      if (count >= 2) {
+        throw this.upgradeRequired('platforms', count, 2);
       }
     }
 
     if (feature === 'members') {
       const count = await this.teamsService.getTeamMemberCount(teamId);
-      if (count >= 2) {
-        throw this.upgradeRequired('members', count, 2);
+      if (count >= 1) {
+        throw this.upgradeRequired('members', count, 1);
       }
     }
 

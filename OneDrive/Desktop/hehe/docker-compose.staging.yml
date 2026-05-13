@@ -1,0 +1,67 @@
+version: '3.9'
+
+# Staging environment compose file.
+# Run with: docker-compose -f docker-compose.staging.yml up
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: postiz-staging-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postiz}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-staging_password}
+      POSTGRES_DB: ${DB_NAME:-postiz_staging}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postiz}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: postiz-staging-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_staging_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: postiz-staging-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: staging
+      DATABASE_URL: postgresql://${DB_USER:-postiz}:${DB_PASSWORD:-staging_password}@postgres:5432/${DB_NAME:-postiz_staging}
+      REDIS_URL: redis://redis:6379
+      ENABLE_SWAGGER: "true"
+    env_file:
+      - ./backend/.env.staging
+    ports:
+      - "3001:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_staging_data:
+  redis_staging_data:

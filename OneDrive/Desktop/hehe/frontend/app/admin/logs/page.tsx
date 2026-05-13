@@ -146,7 +146,7 @@ export default function AdminLogsPage() {
                 return (
                   <div key={log.id} className="py-3 space-y-1">
                     <div className="flex items-start gap-3">
-                      <cfg.icon className={`w-4 h-4 mt-0.5 flex-shrink-0 ${cfg.className}`} />
+                      <cfg.icon className={`w-4 h-4 mt-0.5 shrink-0 ${cfg.className}`} />
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-1">
                           <Badge variant="outline" className={cfg.badge}>
@@ -161,7 +161,7 @@ export default function AdminLogsPage() {
                             </span>
                           )}
                         </div>
-                        <p className="text-sm break-words">{log.message}</p>
+                        <p className="text-sm wrap-break-word">{log.message}</p>
                         {log.meta && Object.keys(log.meta).length > 0 && (
                           <pre className="mt-1 text-xs text-muted-foreground bg-muted rounded p-2 overflow-x-auto">
                             {JSON.stringify(log.meta, null, 2)}

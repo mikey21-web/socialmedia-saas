@@ -10,10 +10,9 @@
     "target": "ES2021",
     "sourceMap": true,
     "outDir": "./dist",
-    "incremental": true,
+    "incremental": false,
     "strict": true,
     "skipLibCheck": true,
-    "ignoreDeprecations": "6.0",
     "moduleResolution": "node",
     "typeRoots": [
       "./node_modules/@types",

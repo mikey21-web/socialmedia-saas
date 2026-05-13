@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "langchain": "^0.1.0",
+    "puppeteer": "^19.11.1",
     "zod": "^3.22.0"
   },
   "devDependencies": {

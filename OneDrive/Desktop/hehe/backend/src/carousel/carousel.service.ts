@@ -4,9 +4,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BrandVoiceService } from '../brand-voice/brand-voice.service';
 import { LlmService } from '../agents/llm/llm.service';
 import { HumanizerService } from '../ai/humanizer/humanizer.service';
+import { CritiqueService } from '../ai/critique/critique.service';
 import { HtmlGeneratorService } from './html-generator.service';
 import { PlaywrightExporterService } from './playwright-exporter.service';
 import { CarouselBrief, CarouselPalette, CarouselSlide } from './carousel.types';
+import { R2StorageService } from '../media/r2-storage.service';
 
 @Injectable()
 export class CarouselService {
@@ -15,8 +17,10 @@ export class CarouselService {
     private readonly brandVoice: BrandVoiceService,
     private readonly llm: LlmService,
     private readonly humanizer: HumanizerService,
+    private readonly critique: CritiqueService,
     private readonly htmlGenerator: HtmlGeneratorService,
-    private readonly exporter: PlaywrightExporterService,
+    private readonly playwrightExporter: PlaywrightExporterService,
+    private readonly r2Storage: R2StorageService,
   ) {}
 
   async generateCarousel(teamId: string, brief: CarouselBrief) {
@@ -37,14 +41,8 @@ export class CarouselService {
         secondary: profile.fontSecondary,
       },
     });
-    const pngUrls = await this.exporter.export({
-      teamId,
-      html: htmlSource,
-      slideCount,
-      deviceScaleFactor: 1080 / 420,
-    });
 
-    return this.prisma.carousel.create({
+    const carousel = await this.prisma.carousel.create({
       data: {
         teamId,
         brandVoiceProfileId: profile.id,
@@ -53,9 +51,28 @@ export class CarouselService {
         slideCount,
         slides: slides as unknown as Prisma.InputJsonValue,
         htmlSource,
-        pngUrls,
+        pngUrls: [],
         status: 'ready',
       },
+    });
+
+    const htmlSlides = slides.map((_, index) => this.htmlGenerator.buildSingleSlideHtml(htmlSource, index));
+    const buffers = await this.playwrightExporter.exportSlidesToBuffers(htmlSlides);
+
+    const pngUrls: string[] = [];
+    for (let i = 0; i < buffers.length; i++) {
+      try {
+        const key = `carousels/${carousel.id}/slide-${i + 1}.png`;
+        const url = await this.r2Storage.upload(key, buffers[i], 'image/png');
+        pngUrls.push(url);
+      } catch {
+        pngUrls.push('');
+      }
+    }
+
+    return this.prisma.carousel.update({
+      where: { id: carousel.id },
+      data: { pngUrls },
     });
   }
 
@@ -145,17 +162,30 @@ Return JSON: {"slides":[{"headline":"...","body":"..."}]}`;
     const slides: CarouselSlide[] = [];
     for (let i = 0; i < input.slideCount; i++) {
       const raw = rawSlides[i] ?? this.defaultSlide(input.topic, i, input.slideCount);
+
+      // Step 1: humanize
       const humanized = await this.humanizer.humanize(`${raw.headline}\n${raw.body}`, {
         platform: 'instagram',
         toneDimensions: input.toneDimensions,
       });
-      const [headline, ...bodyParts] = humanized.humanized.split('\n').filter(Boolean);
+
+      // Step 2: critique-and-revise gate (Open Design pattern)
+      // Quality bar: each slide must pass 5-dim critique before render
+      const reviewed = await this.critique.critiqueAndRevise(humanized.humanized, {
+        artifactType: 'carousel_slide',
+        platform: 'instagram',
+        goal: 'engagement',
+      }, { maxAttempts: 2 });
+
+      const finalText = reviewed.finalContent;
+      const [headline, ...bodyParts] = finalText.split('\n').filter(Boolean);
+
       slides.push({
         slideNumber: i + 1,
         role: this.slideRole(i, input.slideCount),
         headline: headline ?? raw.headline,
         body: bodyParts.join(' ') || raw.body,
-        copyText: humanized.humanized,
+        copyText: finalText,
         designTokens: this.designTokens(input.palette, i),
       });
     }

@@ -1,42 +1,56 @@
 import { BrandContext } from '../../../brand/brand.service';
-import { Angle } from '../types';
+import { Angle, EnrichedContext } from '../types';
+import { getHooksForPlatform, formatHooksForPrompt } from '../hooks/hook-library';
 
-export function buildTiktokPrompt(angle: Angle, brand: BrandContext): string {
-  return `You are writing a TikTok caption for ${brand.brandName}.
+export function buildTiktokPrompt(angle: Angle, brand: BrandContext, enriched?: EnrichedContext): string {
+  const hooks = getHooksForPlatform('tiktok', 4);
+  const trendingAudio = enriched?.trendSignals
+    ?.filter(t => t.platform === 'tiktok' && t.signalType === 'audio')
+    .map(t => `"${t.value}" (popularity: ${t.popularity})`)
+    .slice(0, 3) ?? [];
+  const trendingHashtags = enriched?.trendSignals
+    ?.filter(t => t.platform === 'tiktok' && t.signalType === 'hashtag')
+    .map(t => `#${t.value}`)
+    .slice(0, 5) ?? [];
 
-BRAND VOICE:
-- Tone: ${brand.voice.tone}
-- Traits: ${brand.voice.traits.join(', ')}
-- Formality: ${brand.voice.formality}/10
-- Emoji usage: ${brand.voice.emojiUsage}
+  return `You are a TikTok creator who gets millions of views. You write captions that make people watch till the end and hit follow. Zero corporate energy.
 
-AUDIENCE:
-- Age: ${brand.audience.age}
-- Interests: ${brand.audience.interests.join(', ')}
-- Pain points: ${brand.audience.painPoints.join(', ')}
+BRAND: ${brand.brandName} (${brand.industry})
+VIBE: ${brand.voice.tone} | Emoji: ${brand.voice.emojiUsage}
+TRAITS: ${brand.voice.traits.join(', ')}
 
-EXAMPLES OF OUR VOICE (match this energy):
-${brand.voiceExamples.slice(0, 5).map((e, i) => `${i + 1}. "${e.content}"`).join('\n') || 'No examples provided yet.'}
+AUDIENCE: ${brand.audience.age}
+INTO: ${brand.audience.interests.join(', ')}
+PAIN: ${brand.audience.painPoints.join(', ')}
 
-ANGLE TO WRITE ABOUT:
-Pillar: ${angle.pillar}
-Angle: ${angle.angle}
+${brand.voiceExamples.length ? `OUR ENERGY:\n${brand.voiceExamples.slice(0, 2).map((e, i) => `${i + 1}. "${e.content}"`).join('\n')}` : ''}
+
+THE ANGLE:
+"${angle.angle}"
+Format: ${angle.hookFormat || 'POV or day-in-the-life'}
+Detail: ${angle.specificDetails || 'make it hyper-specific'}
+
+${trendingAudio.length ? `TRENDING SOUNDS: ${trendingAudio.join(', ')}` : ''}
+${trendingHashtags.length ? `TRENDING TAGS: ${trendingHashtags.join(' ')}` : ''}
+
+HOOK TEMPLATES:
+${formatHooksForPrompt(hooks)}
 
 TIKTOK RULES:
 - STRICT: fullCaption MUST be 150 characters or fewer
-- Very short caption (20-60 words max)
-- Gen-Z/casual energy (unless brand says otherwise)
-- Trending sound suggestion if relevant
-- 2-3 hashtags
-- Hook must be instant — no warm-up
-- Match emoji usage: ${brand.voice.emojiUsage}
+- Caption is secondary to the video — keep it PUNCHY
+- Use TikTok language: "POV:", "Wait for it", "This is your sign to..."
+- 2-4 hashtags (mix trending + niche)
+- The first 3 words decide if someone reads the rest
+- NO: full sentences, marketing speak, anything longer than a text message
+- If it reads like an Instagram caption, it's WRONG for TikTok
 
 OUTPUT JSON ONLY:
 {
-  "hook": "caption opening",
-  "body": "rest of caption",
+  "hook": "the punchy caption opener",
+  "body": "",
   "cta": "",
-  "hashtags": ["tag1", "tag2"],
-  "fullCaption": "complete assembled caption (150 chars max)"
+  "hashtags": ["trending1", "niche1"],
+  "fullCaption": "complete caption (150 chars max)"
 }`;
 }

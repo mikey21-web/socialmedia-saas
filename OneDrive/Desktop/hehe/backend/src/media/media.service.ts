@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import Replicate from 'replicate';
 import { PrismaService } from '../prisma/prisma.service';
 import { HyperframesService } from './hyperframes.service';
+import { assertSsrfSafe } from '../common/ssrf-guard';
 
 const ALLOWED_MIME_PREFIXES = ['image/', 'video/', 'application/pdf'];
 const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
@@ -475,6 +476,7 @@ export class MediaService {
    * Throws BadRequestException if the remote resource exceeds the limit.
    */
   async fetchRemoteWithSizeCap(url: string): Promise<{ buffer: Buffer; mimeType: string }> {
+    await assertSsrfSafe(url);
     const response = await fetch(url);
     if (!response.ok) {
       throw new BadRequestException(`Remote fetch failed: HTTP ${response.status}`);

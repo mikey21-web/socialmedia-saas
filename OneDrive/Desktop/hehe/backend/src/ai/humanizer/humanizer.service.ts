@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { LlmService } from '../../agents/llm/llm.service';
 import { Detection, HumanizerContext } from './types';
 import { getAllDetectors } from './pattern-detectors';
+import { ANTI_SLOP_RULES } from '../prompt-policy/anti-slop-policy';
 
 export interface HumanizeResult {
   original: string;
@@ -88,7 +89,9 @@ export class HumanizerService {
       ? `This is for ${context.platform}.`
       : '';
 
-    const prompt = `You are an expert editor. Your job is to make this text sound like a real human wrote it, not an AI.
+    const prompt = `${ANTI_SLOP_RULES}
+
+You are an expert editor. Your job is to make this text sound like a real human wrote it, not an AI.
 
 Rules:
 - Vary sentence length naturally (mix short punchy sentences with longer ones)

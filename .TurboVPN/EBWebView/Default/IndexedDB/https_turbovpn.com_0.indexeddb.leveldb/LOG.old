@@ -1,0 +1,26 @@
+2026/01/22-03:05:50.698 1990 Reusing MANIFEST C:\Users\TUMMA\.TurboVPN\EBWebView\Default\IndexedDB\https_turbovpn.com_0.indexeddb.leveldb/MANIFEST-000001
+2026/01/22-03:05:50.699 1990 Recovering log #85
+2026/01/22-03:05:50.699 1990 Reusing old log C:\Users\TUMMA\.TurboVPN\EBWebView\Default\IndexedDB\https_turbovpn.com_0.indexeddb.leveldb/000085.log 
+2026/01/22-03:05:50.699 1990 Delete type=2 #84
+2026/01/22-03:05:50.706 6f80 Level-0 table #90: started
+2026/01/22-03:05:50.709 6f80 Level-0 table #90: 654 bytes OK
+2026/01/22-03:05:50.710 6f80 Delete type=0 #85
+2026/01/22-03:05:50.710 1990 Manual compaction at level-0 from '\x00\x1d\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x1e\x00\x00\x00' @ 0 : 0; will stop at '\x00\x1d\x00\x00\x05' @ 1244 : 1
+2026/01/22-03:05:50.711 1990 Compacting 1@0 + 1@1 files
+2026/01/22-03:05:50.713 1990 Generated table #91@0: 93 keys, 2440 bytes
+2026/01/22-03:05:50.713 1990 Compacted 1@0 + 1@1 files => 2440 bytes
+2026/01/22-03:05:50.714 1990 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/01/22-03:05:50.714 1990 Delete type=2 #90
+2026/01/22-03:05:50.715 1990 Manual compaction at level-0 from '\x00\x1d\x00\x00\x05' @ 1244 : 1 .. '\x00\x1e\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/01/22-03:05:51.800 1990 Level-0 table #93: started
+2026/01/22-03:05:51.803 1990 Level-0 table #93: 1772 bytes OK
+2026/01/22-03:05:51.804 1990 Delete type=2 #87
+2026/01/22-03:05:51.804 1990 Delete type=0 #89
+2026/01/22-03:05:51.811 1990 Manual compaction at level-0 from '\x00\x1e\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x1f\x00\x00\x00' @ 0 : 0; will stop at '\x00\x1f\x00\x00\x05' @ 1292 : 1
+2026/01/22-03:05:51.811 1990 Compacting 1@0 + 1@1 files
+2026/01/22-03:05:51.813 1990 Generated table #94@0: 98 keys, 2107 bytes
+2026/01/22-03:05:51.813 1990 Compacted 1@0 + 1@1 files => 2107 bytes
+2026/01/22-03:05:51.814 1990 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/01/22-03:05:51.815 1990 Delete type=2 #93
+2026/01/22-03:05:51.816 1990 Manual compaction at level-0 from '\x00\x1f\x00\x00\x05' @ 1292 : 1 .. '\x00\x1f\x00\x00\x00' @ 0 : 0; will stop at (end)
+2026/01/22-03:05:51.845 6f80 Manual compaction at level-0 from '\x00\x1f\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00 \x00\x00\x00' @ 0 : 0; will stop at (end)

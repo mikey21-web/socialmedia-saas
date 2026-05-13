@@ -1,0 +1,14 @@
+{
+  "routes": [
+    "/posts",
+    "/analytics",
+    "/calendar",
+    "/inbox",
+    "/recommendations",
+    "/trends",
+    "/settings/billing",
+    "/settings/connections",
+    "/admin",
+    "/admin/teams"
+  ]
+}

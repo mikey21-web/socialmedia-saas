@@ -11,8 +11,15 @@ export class TemporalClientService implements OnModuleDestroy {
       return this.client;
     }
 
+    const address = process.env.TEMPORAL_ADDRESS ?? process.env.TEMPORAL_SERVER_URL;
+    if (!address || address.includes('localhost') || address.includes('127.0.0.1')) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('Invalid TEMPORAL_ADDRESS in production: localhost addresses are not allowed');
+      }
+    }
+
     this.connection = await Connection.connect({
-      address: process.env.TEMPORAL_SERVER_URL ?? 'localhost:7233',
+      address: address ?? 'localhost:7233',
     });
 
     this.client = new Client({

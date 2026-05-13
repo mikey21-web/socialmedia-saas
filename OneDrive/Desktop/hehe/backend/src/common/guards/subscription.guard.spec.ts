@@ -6,6 +6,7 @@ import { TeamsService } from '../../teams/teams.service';
 const mockTeams = {
   getTeamPlan: jest.fn(),
   getDailyPostCount: jest.fn(),
+  getMonthlyScheduledPostCount: jest.fn(),
   getMonthlyAnalyticsEventCount: jest.fn(),
 };
 
@@ -45,7 +46,7 @@ describe('SubscriptionGuard', () => {
   it('blocks free teams after one post per day', async () => {
     mockReflector.getAllAndOverride.mockReturnValue('posts');
     mockTeams.getTeamPlan.mockResolvedValue('free');
-    mockTeams.getDailyPostCount.mockResolvedValue(1);
+    mockTeams.getMonthlyScheduledPostCount.mockResolvedValue(30);
 
     await expect(guard.canActivate(context())).rejects.toThrow(ForbiddenException);
   });

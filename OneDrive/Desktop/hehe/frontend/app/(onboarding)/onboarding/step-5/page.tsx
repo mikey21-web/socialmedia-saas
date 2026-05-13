@@ -35,6 +35,7 @@ export default function Step5() {
         await api.post("/brand/voice-examples", { content: ex.content, platform: ex.platform });
       }
       await completeOnboarding();
+      if (typeof window !== 'undefined') { localStorage.setItem('onboardingComplete', 'true'); }
       router.push("/dashboard");
     } finally { setSaving(false); }
   };

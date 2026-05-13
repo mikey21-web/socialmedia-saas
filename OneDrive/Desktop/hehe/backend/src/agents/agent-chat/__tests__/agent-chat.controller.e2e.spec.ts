@@ -1,4 +1,4 @@
-import { INestApplication, CanActivate, ExecutionContext } from '@nestjs/common';
+import { INestApplication, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
@@ -86,7 +86,7 @@ describe('AgentChatController (e2e)', () => {
       controllers: [AgentChatController],
       providers: [
         { provide: AgentChatService, useValue: mockAgentChatService },
-        JwtAuthGuard,
+        { provide: JwtAuthGuard, useValue: { canActivate: () => { throw new UnauthorizedException(); } } },
         { provide: APP_GUARD, useValue: mockThrottlerGuard },
       ],
     })
@@ -326,6 +326,8 @@ describe('AgentChatController real JWT guard (e2e)', () => {
         { provide: APP_GUARD, useValue: mockThrottlerGuard },
       ],
     })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => { throw new UnauthorizedException(); } })
       .compile();
 
     app = moduleFixture.createNestApplication();

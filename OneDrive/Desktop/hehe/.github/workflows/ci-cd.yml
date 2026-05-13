@@ -31,7 +31,7 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Lint
-        run: npm run lint || true
+        run: npm run lint
 
       - name: Run tests
         run: npm test -- --no-coverage

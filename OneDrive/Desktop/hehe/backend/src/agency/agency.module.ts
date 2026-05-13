@@ -17,6 +17,7 @@ import { AnalystService } from './specialists/analyst/analyst.service';
 import { AnalystController } from './specialists/analyst/analyst.controller';
 import { EngagementManagerService } from './specialists/engagement-manager/engagement-manager.service';
 import { EngagementManagerController } from './specialists/engagement-manager/engagement-manager.controller';
+import { CompetitorWatcherService } from './specialists/competitor-watcher/competitor-watcher.service';
 import { BrandVoiceTrainerService } from './brand-voice/brand-voice-trainer.service';
 import { BrandVoiceController } from './brand-voice/brand-voice.controller';
 import { TrendMonitorService } from './trends/trend-monitor.service';
@@ -25,6 +26,12 @@ import { AgencyOrchestratorService } from './orchestrator/agency-orchestrator.se
 import { AgencyOrchestratorController } from './orchestrator/agency-orchestrator.controller';
 import { ReplicateModule } from '../ai/replicate/replicate.module';
 import { ImageAdapterService } from './specialists/designer/image-adapter.service';
+import { BossAgentService } from './boss/boss-agent.service';
+import { BossAgentController } from './boss/boss-agent.controller';
+import { UgcVideoService } from './specialists/ugc-video/ugc-video.service';
+import { UgcVideoController } from './specialists/ugc-video/ugc-video.controller';
+import { ClientPortalService } from './client-portal/client-portal.service';
+import { ClientPortalController } from './client-portal/client-portal.controller';
 
 @Module({
   imports: [
@@ -39,6 +46,7 @@ import { ImageAdapterService } from './specialists/designer/image-adapter.servic
   ],
   controllers: [
     AgencyOrchestratorController,
+    BossAgentController,
     BrandVoiceController,
     StrategistController,
     CopywriterController,
@@ -46,19 +54,25 @@ import { ImageAdapterService } from './specialists/designer/image-adapter.servic
     AnalystController,
     EngagementManagerController,
     TrendController,
+    UgcVideoController,
+    ClientPortalController,
   ],
   providers: [
     AgentRunLoggerService,
     AgencyOrchestratorService,
+    BossAgentService,
     BrandVoiceTrainerService,
     StrategistService,
     CopywriterService,
     DesignerService,
     AnalystService,
     EngagementManagerService,
+    CompetitorWatcherService,
     TrendMonitorService,
     ImageAdapterService,
+    UgcVideoService,
+    ClientPortalService,
   ],
-  exports: [AgencyOrchestratorService],
+  exports: [AgencyOrchestratorService, BossAgentService, ClientPortalService, CompetitorWatcherService],
 })
 export class AgencyModule {}

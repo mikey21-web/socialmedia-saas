@@ -33,7 +33,7 @@ function isAdminToken(token: string | null) {
 }
 
 function isBoneyardBuild() {
-  return typeof window !== "undefined" && Boolean((window as Window & { __BONEYARD_BUILD?: boolean }).__BONEYARD_BUILD);
+  return process.env.NODE_ENV !== 'production' && typeof window !== "undefined" && Boolean((window as Window & { __BONEYARD_BUILD?: boolean }).__BONEYARD_BUILD);
 }
 
 export default function AdminLayout({ children }: { children: ReactNode }) {

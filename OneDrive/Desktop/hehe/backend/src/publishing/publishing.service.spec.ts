@@ -16,6 +16,9 @@ const mockPrisma = {
     update: jest.fn(),
     updateMany: jest.fn(),
   },
+  postPublishLog: {
+    create: jest.fn(),
+  },
   analyticsEvent: {
     createMany: jest.fn(),
   },
@@ -47,7 +50,7 @@ describe('PublishingService', () => {
     const start = jest.fn().mockResolvedValue({ workflowId: 'publish-1' });
     mockTemporalClient.getClient.mockResolvedValue({ workflow: { start } });
 
-    const result = await service.publishPost('post-1', 'team-1');
+    const result = await service.startPublishPostWorkflow('post-1', 'team-1');
 
     expect(start).toHaveBeenCalledWith(expect.any(Function), expect.objectContaining({
       args: [{ postId: 'post-1', teamId: 'team-1', taskQueue: 'posts-queue' }],

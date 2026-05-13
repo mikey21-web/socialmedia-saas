@@ -7,6 +7,7 @@ import {
   BarChart2,
   Bot,
   Brain,
+  Building2,
   Calendar,
   CheckCircle2,
   FileImage,
@@ -54,6 +55,7 @@ const navItems = [
   { href: "/settings/automation",    label: "Automation",   icon: Bot },
   { href: "/settings",               label: "Settings",     icon: Settings },
   { href: "/agency",                 label: "AI Agency",    icon: Zap },
+  { href: "/agency/office",          label: "The Office",   icon: Building2 },
   { href: "/agency/brand-voice",     label: "Brand Voice",  icon: Mic2 },
   { href: "/agency/strategy",        label: "Strategy",     icon: Brain },
   { href: "/agency/pipeline",        label: "Pipeline",     icon: Kanban },
@@ -146,7 +148,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Floating Agent Button */}
         <button
           onClick={() => setAgentSidebarOpen(true)}
-          className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-30 flex-shrink-0"
+          className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-linear-to-r from-violet-500 to-fuchsia-500 text-white shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-30 shrink-0"
           aria-label="Open AI Agent"
         >
           <Bot className="w-6 h-6" />

@@ -71,14 +71,15 @@ describe('SubscriptionsService', () => {
       },
     };
 
-    const url = await service.createCheckoutSession('team-1', 'price_pro');
+    const result = await service.createCheckoutSession('team-1', undefined, 'pro');
 
-    expect(url).toBe('https://stripe.test/session');
+    expect(result).toEqual({ url: 'https://stripe.test/session' });
     expect(mockPrisma.subscription.update).toHaveBeenCalledWith({
       where: { teamId: 'team-1' },
       data: {
         stripeCustomerId: 'cus_123',
         stripePriceId: 'price_pro',
+        plan: 'pro',
       },
     });
   });

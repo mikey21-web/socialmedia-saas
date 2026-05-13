@@ -9,6 +9,7 @@ import { AuthenticatedRequestUser } from '../common/interfaces/authenticated-req
 import { AnalyticsService } from './analytics.service';
 import { CampaignsService } from './campaigns.service';
 import { AnalyticsExportService } from './export.service';
+import { LearningLoopService } from './learning-loop.service';
 
 @UseGuards(JwtAuthGuard, SubscriptionGuard)
 @Controller('analytics')
@@ -17,6 +18,7 @@ export class AnalyticsController {
     private readonly analyticsService: AnalyticsService,
     private readonly analyticsExportService: AnalyticsExportService,
     private readonly campaignsService: CampaignsService,
+    private readonly learningLoop: LearningLoopService,
   ) {}
 
   @Get('posts/:id')
@@ -246,5 +248,21 @@ export class AnalyticsController {
   async getContentTrends(@TeamId() teamId: string | undefined) {
     if (!teamId) throw new BadRequestException('Missing team context');
     return this.analyticsService.getContentPerformanceTrends(teamId);
+  }
+
+  // ─── Learning Loop ──────────────────────────────────────────────────────────
+
+  @Get('learning-loop/insights')
+  @SubscriptionFeatureLimit('analytics')
+  async getLearningInsights(@TeamId() teamId: string | undefined) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.learningLoop.getTeamInsights(teamId);
+  }
+
+  @Post('learning-loop/analyze')
+  @SubscriptionFeatureLimit('analytics')
+  async triggerAnalysis(@TeamId() teamId: string | undefined) {
+    if (!teamId) throw new BadRequestException('Missing team context');
+    return this.learningLoop.analyzeTeamPatterns(teamId);
   }
 }

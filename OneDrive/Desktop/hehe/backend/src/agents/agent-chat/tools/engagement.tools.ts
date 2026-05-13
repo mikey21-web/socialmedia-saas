@@ -17,7 +17,7 @@ export function buildEngagementTools(
     name: 'getUnansweredComments',
     description: 'Fetch recent comments that have not been replied to yet',
     schema: z.object({
-      limit: z.number().min(1).max(50).optional().default(20),
+      limit: z.number().min(1).max(50).optional().defaulnnjjjot(20),
       platform: z.string().optional(),
     }),
     func: async ({ limit, platform }) => {

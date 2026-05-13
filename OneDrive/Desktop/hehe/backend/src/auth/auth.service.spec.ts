@@ -77,7 +77,7 @@ describe('AuthService', () => {
       expect(result.team_id).toBe('t1');
       expect(result.refreshToken).toBe('mock-refresh-token');
       expect(mockJwt.sign).toHaveBeenCalledWith(
-        { sub: 'u1', email: 'a@b.com', team_id: 't1' },
+        { sub: 'u1', email: 'a@b.com', team_id: 't1', role: 'user' },
         { expiresIn: '24h' },
       );
       expect(mockEmail.sendWelcomeEmail).toHaveBeenCalledWith('a@b.com', "Alice's Team");
@@ -137,7 +137,7 @@ describe('AuthService', () => {
       await service.signup('a@b.com', 'password123', 'Bob');
 
       expect(mockJwt.sign).toHaveBeenCalledWith(
-        { sub: 'u1', email: 'a@b.com', team_id: 't1' },
+        { sub: 'u1', email: 'a@b.com', team_id: 't1', role: 'user' },
         { expiresIn: '1h' },
       );
     });
@@ -162,7 +162,7 @@ describe('AuthService', () => {
       expect(result.refreshToken).toBe('mock-refresh-token');
       expect(result.user.email).toBe('a@b.com');
       expect(mockJwt.sign).toHaveBeenCalledWith(
-        { sub: 'u1', email: 'a@b.com', team_id: 't1' },
+        { sub: 'u1', email: 'a@b.com', team_id: 't1', role: 'user' },
         { expiresIn: '24h' },
       );
     });

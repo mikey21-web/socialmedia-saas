@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { nanoid } from 'nanoid';
 import * as fs from 'fs';
 
@@ -45,7 +46,37 @@ export class R2StorageService {
         ContentType: contentType,
       })
     );
-    return `${this.publicUrl}/${key}`;
+    const signedUrl = await getSignedUrl(
+      this.client,
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      { expiresIn: 3600 },
+    );
+    return signedUrl;
+  }
+
+  async upload(
+    key: string,
+    buffer: Buffer,
+    contentType = 'image/png'
+  ): Promise<string> {
+    if (!process.env.R2_ACCOUNT_ID || !this.bucket || !this.publicUrl) {
+      throw new Error('R2 storage is not configured');
+    }
+
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+      })
+    );
+    const signedUrl = await getSignedUrl(
+      this.client,
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      { expiresIn: 3600 },
+    );
+    return signedUrl;
   }
 
   async uploadBase64(

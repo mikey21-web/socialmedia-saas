@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Response } from 'express';
-import { AuthService, GoogleAuthProfile } from './auth.service';
+import { AuthService } from './auth.service';
 import { GoogleVerifyDto } from './dto/google-verify.dto';
 
 @Controller('auth')
@@ -17,14 +17,15 @@ export class GoogleOauthController {
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
   async googleAuthCallback(
-    @Req() req: { user: GoogleAuthProfile },
+    @Req() req: { user: { id: string; email: string; name?: string | null } },
     @Res() res: Response,
   ) {
-    const result = await this.authService.googleAuth(req.user);
+    const result = await this.authService.generateTokens(req.user);
     this.setRefreshCookie(res, result.refreshToken);
     const frontendBaseUrl = process.env.FRONTEND_URL ?? process.env.APP_URL ?? 'http://localhost:3000';
-    const callbackUrl = new URL('/auth/google/callback', frontendBaseUrl);
-    callbackUrl.searchParams.set('token', result.token);
+    const callbackUrl = new URL('/auth/callback', frontendBaseUrl);
+    callbackUrl.searchParams.set('token', result.accessToken);
+    callbackUrl.searchParams.set('refresh', result.refreshToken);
 
     return res.redirect(callbackUrl.toString());
   }

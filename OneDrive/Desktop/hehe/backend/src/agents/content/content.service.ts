@@ -2,7 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { BrandService } from '../../brand/brand.service';
 import { LlmService } from '../llm/llm.service';
-import { GenerateInput, StepResult } from './types';
+import { EnrichedContext, GenerateInput, StepResult } from './types';
 import { ideate } from './pipeline/ideate';
 import { pickBestAngle } from './pipeline/pick-angle';
 import { adaptForAllPlatforms } from './pipeline/adapt-platform';
@@ -18,6 +18,129 @@ export class ContentService {
     private readonly llm: LlmService,
   ) {}
 
+  private async gatherEnrichedContext(teamId: string, platforms: string[]): Promise<EnrichedContext> {
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const [publishedPosts, trendSignals, competitorTracks] = await Promise.all([
+      this.prisma.post.findMany({
+        where: { teamId, status: 'published', deletedAt: null, createdAt: { gte: thirtyDaysAgo } },
+        orderBy: { impressions: 'desc' },
+        take: 30,
+        select: { title: true, content: true, impressions: true, reach: true, platforms: { select: { platform: true } } },
+      }),
+      this.prisma.trendSignal.findMany({
+        where: { platform: { in: platforms.length ? platforms : undefined }, expiresAt: { gt: now } },
+        orderBy: { popularity: 'desc' },
+        take: 10,
+      }),
+      this.prisma.competitorTrack.findMany({
+        where: { teamId, isActive: true },
+        include: {
+          posts: {
+            where: { postedAt: { gte: thirtyDaysAgo } },
+            orderBy: { engagementRate: 'desc' },
+            take: 5,
+          },
+        },
+      }),
+    ]);
+
+    const topPerformers = publishedPosts.slice(0, 5).map(p => ({
+      title: p.title || p.content.slice(0, 60),
+      impressions: p.impressions,
+      platform: p.platforms[0]?.platform,
+    }));
+
+    const avgImpressions = publishedPosts.length
+      ? publishedPosts.reduce((s, p) => s + p.impressions, 0) / publishedPosts.length
+      : 0;
+
+    const flops = publishedPosts
+      .filter(p => p.impressions < avgImpressions * 0.3)
+      .slice(0, 3)
+      .map(p => ({
+        title: p.title || p.content.slice(0, 60),
+        impressions: p.impressions,
+        reason: p.impressions === 0 ? 'zero reach' : 'well below average',
+      }));
+
+    const competitorInsights = competitorTracks.map(ct => ({
+      handle: ct.handle,
+      platform: ct.platform,
+      topTopics: ct.posts.slice(0, 3).map(cp => cp.caption.slice(0, 50)),
+      engagementRate: ct.posts[0]?.engagementRate
+        ? `${ct.posts[0].engagementRate.toFixed(1)}%`
+        : 'unknown',
+      strengths: [] as string[],
+      weaknesses: [] as string[],
+      recentContent: ct.posts.slice(0, 3).map(cp => cp.caption.slice(0, 80)),
+    }));
+
+    let winningPatterns;
+    if (publishedPosts.length >= 5) {
+      const topContent = publishedPosts.slice(0, 10);
+      const topWords = this.extractFrequentWords(topContent.map(p => p.content));
+      winningPatterns = {
+        topics: topWords.slice(0, 5),
+        formats: this.detectFormats(topContent.map(p => p.content)),
+        timings: [],
+        hashtags: this.extractHashtags(topContent.map(p => p.content)),
+      };
+    }
+
+    return {
+      winningPatterns,
+      competitorInsights,
+      trendSignals: trendSignals.map(t => ({
+        platform: t.platform,
+        signalType: t.signalType,
+        value: t.value,
+        popularity: t.popularity,
+        velocity: t.velocity,
+      })),
+      recentTopPerformers: topPerformers,
+      recentFlops: flops,
+    };
+  }
+
+  private extractFrequentWords(texts: string[]): string[] {
+    const stopWords = new Set(['the', 'a', 'an', 'is', 'are', 'was', 'were', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'this', 'that', 'it', 'its', 'our', 'your', 'we', 'you', 'i', 'my', 'me', 'not', 'no', 'so', 'if', 'how', 'what', 'when', 'do', 'does', 'has', 'have', 'had', 'be', 'been', 'can', 'will', 'just', 'about', 'up', 'out', 'all']);
+    const freq: Record<string, number> = {};
+    for (const text of texts) {
+      const words = text.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/);
+      for (const w of words) {
+        if (w.length > 3 && !stopWords.has(w)) {
+          freq[w] = (freq[w] ?? 0) + 1;
+        }
+      }
+    }
+    return Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([w]) => w);
+  }
+
+  private detectFormats(texts: string[]): string[] {
+    const formats: string[] = [];
+    const joined = texts.join('\n');
+    if (/\d+\.\s/.test(joined)) formats.push('numbered-lists');
+    if (/POV:|pov:/i.test(joined)) formats.push('POV');
+    if (/\?/.test(joined)) formats.push('questions');
+    if (/story|told|happened|remember/i.test(joined)) formats.push('storytelling');
+    if (joined.split('\n').filter(l => l.startsWith('-') || l.startsWith('•')).length > 3) formats.push('bullet-points');
+    if (formats.length === 0) formats.push('short-form');
+    return formats;
+  }
+
+  private extractHashtags(texts: string[]): string[] {
+    const tags: Record<string, number> = {};
+    for (const text of texts) {
+      const matches = text.match(/#\w+/g) ?? [];
+      for (const m of matches) {
+        tags[m.toLowerCase()] = (tags[m.toLowerCase()] ?? 0) + 1;
+      }
+    }
+    return Object.entries(tags).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([t]) => t);
+  }
+
   async generate(teamId: string, input: GenerateInput) {
     const brand = await this.brandService.getBrandContext(teamId);
     const steps: StepResult[] = [];
@@ -28,6 +151,21 @@ export class ContentService {
     if (platforms.length === 0) {
       throw new NotFoundException('No platforms configured — update your brand profile');
     }
+
+    const enrichedStart = new Date();
+    const enriched = await this.gatherEnrichedContext(teamId, platforms);
+    steps.push({
+      name: 'gather_intelligence',
+      startedAt: enrichedStart,
+      completedAt: new Date(),
+      durationMs: Date.now() - enrichedStart.getTime(),
+      output: {
+        topPerformers: enriched.recentTopPerformers.length,
+        flops: enriched.recentFlops.length,
+        trends: enriched.trendSignals.length,
+        competitors: enriched.competitorInsights.length,
+      },
+    });
 
     const run = await this.prisma.agentRun.create({
       data: {
@@ -44,6 +182,8 @@ export class ContentService {
         { topic: input.topic, intent: input.intent },
         brand,
         this.llm,
+        enriched,
+        platforms[0],
       );
       steps.push({
         name: 'ideation',
@@ -64,7 +204,7 @@ export class ContentService {
       });
 
       const adaptStart = new Date();
-      const drafts = await adaptForAllPlatforms(platforms, bestAngle, brand, this.llm);
+      const drafts = await adaptForAllPlatforms(platforms, bestAngle, brand, this.llm, enriched);
       steps.push({
         name: 'adapt_platforms',
         startedAt: adaptStart,
@@ -196,9 +336,10 @@ export class ContentService {
 
     const brand = await this.brandService.getBrandContext(teamId);
     const platform = post.platforms[0]?.platform ?? 'instagram';
+    const enriched = await this.gatherEnrichedContext(teamId, [platform]);
 
     const { adaptForPlatform } = await import('./pipeline/adapt-platform');
-    const draft = await adaptForPlatform(platform, context.angle, brand, this.llm);
+    const draft = await adaptForPlatform(platform, context.angle, brand, this.llm, enriched);
     const compliance = checkCompliance(draft, brand);
     const finalCaption = compliance.correctedCaption ?? draft.fullCaption;
 

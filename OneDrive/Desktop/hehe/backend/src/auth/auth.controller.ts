@@ -26,6 +26,7 @@ export class AuthController {
     };
   }
 
+  @Throttle(5, 60)
   @Post('signin')
   async signin(
     @Body() body: AuthDto,

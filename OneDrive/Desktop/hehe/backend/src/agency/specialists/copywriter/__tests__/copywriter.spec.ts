@@ -4,6 +4,7 @@ import { PrismaService } from '../../../../prisma/prisma.service';
 import { LlmService } from '../../../../agents/llm/llm.service';
 import { AgentRunLoggerService } from '../../../agent-run-logger.service';
 import { HumanizerService } from '../../../../ai/humanizer/humanizer.service';
+import { DesignerService } from '../../designer/designer.service';
 
 describe('CopywriterService', () => {
   let service: CopywriterService;
@@ -11,6 +12,7 @@ describe('CopywriterService', () => {
   let llm: { completeJson: jest.Mock };
   let runLogger: { log: jest.Mock };
   let humanizer: { humanize: jest.Mock };
+  let designer: { generateImage: jest.Mock };
 
   const mockBrandVoice = {
     id: 'bv_1',
@@ -32,6 +34,7 @@ describe('CopywriterService', () => {
     };
     llm = { completeJson: jest.fn() };
     runLogger = { log: jest.fn() };
+    designer = { generateImage: jest.fn().mockResolvedValue({ url: 'https://cdn.example.com/image.png' }) };
     humanizer = {
       humanize: jest.fn(async (content: string) => ({
         original: content,
@@ -49,6 +52,7 @@ describe('CopywriterService', () => {
         { provide: LlmService, useValue: llm },
         { provide: AgentRunLoggerService, useValue: runLogger },
         { provide: HumanizerService, useValue: humanizer },
+        { provide: DesignerService, useValue: designer },
       ],
     }).compile();
 
@@ -142,5 +146,191 @@ describe('CopywriterService', () => {
 
     expect(result.x).toBeDefined();
     expect(result.linkedin).toBeDefined();
+  });
+
+  it('throws when brand voice is missing', async () => {
+    prisma.brandVoice.findUnique.mockResolvedValue(null);
+
+    await expect(service.generatePost({
+      teamId: 'team_1',
+      brandVoiceId: 'missing',
+      platform: 'instagram',
+      pillarTopic: 'Tips',
+      contentType: 'educational',
+    })).rejects.toThrow('Brand voice not found');
+  });
+
+  it('adds trend context when trend signal is provided', async () => {
+    prisma.brandVoice.findUnique.mockResolvedValue(mockBrandVoice);
+    prisma.trendSignal.findUnique.mockResolvedValue({ value: '#AI', signalType: 'hashtag', platform: 'x', popularity: 90 });
+    llm.completeJson
+      .mockResolvedValueOnce({ content: 'Use the trend', hashtags: ['#AI'] })
+      .mockResolvedValueOnce({ score: 85, feedback: [] });
+
+    await service.generatePost({
+      teamId: 'team_1',
+      brandVoiceId: 'bv_1',
+      platform: 'x',
+      pillarTopic: 'Trends',
+      contentType: 'trending',
+      trendSignalId: 'trend_1',
+    });
+
+    expect(llm.completeJson.mock.calls[0][0]).toContain('Trending now: #AI');
+  });
+
+  it('includes brand vocabulary in the LLM prompt', async () => {
+    prisma.brandVoice.findUnique.mockResolvedValue(mockBrandVoice);
+    llm.completeJson
+      .mockResolvedValueOnce({ content: 'Growth post', hashtags: ['#growth'] })
+      .mockResolvedValueOnce({ score: 90, feedback: [] });
+
+    await service.generatePost({
+      teamId: 'team_1',
+      brandVoiceId: 'bv_1',
+      platform: 'linkedin',
+      pillarTopic: 'Growth',
+      contentType: 'educational',
+    });
+
+    expect(llm.completeJson.mock.calls[0][0]).toContain('scale, growth, leverage');
+  });
+
+  it('passes tone dimensions to humanizer', async () => {
+    prisma.brandVoice.findUnique.mockResolvedValue(mockBrandVoice);
+    llm.completeJson
+      .mockResolvedValueOnce({ content: 'Growth post', hashtags: ['#growth'] })
+      .mockResolvedValueOnce({ score: 90, feedback: [] });
+
+    await service.generatePost({
+      teamId: 'team_1',
+      brandVoiceId: 'bv_1',
+      platform: 'linkedin',
+      pillarTopic: 'Growth',
+      contentType: 'educational',
+    });
+
+    expect(humanizer.humanize).toHaveBeenCalledWith('Growth post', expect.objectContaining({
+      toneDimensions: mockBrandVoice.toneAttributes,
+    }));
+  });
+
+  it('retries generation when voice score is too low', async () => {
+    prisma.brandVoice.findUnique.mockResolvedValue(mockBrandVoice);
+    llm.completeJson
+      .mockResolvedValueOnce({ content: 'Weak post', hashtags: ['#growth'] })
+      .mockResolvedValueOnce({ score: 50, feedback: ['Too flat'] })
+      .mockResolvedValueOnce({ content: 'Better post', hashtags: ['#growth'] })
+      .mockResolvedValueOnce({ score: 82, feedback: [] });
+
+    const result = await service.generatePost({
+      teamId: 'team_1',
+      brandVoiceId: 'bv_1',
+      platform: 'instagram',
+      pillarTopic: 'Growth',
+      contentType: 'educational',
+    });
+
+    expect(result.content).toBe('Better post');
+    expect(humanizer.humanize).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns final attempt when all voice scores stay low', async () => {
+    prisma.brandVoice.findUnique.mockResolvedValue(mockBrandVoice);
+    llm.completeJson
+      .mockResolvedValueOnce({ content: 'Attempt 1', hashtags: ['#one'] })
+      .mockResolvedValueOnce({ score: 40, feedback: ['Low'] })
+      .mockResolvedValueOnce({ content: 'Attempt 2', hashtags: ['#two'] })
+      .mockResolvedValueOnce({ score: 50, feedback: ['Low'] })
+      .mockResolvedValueOnce({ content: 'Attempt 3', hashtags: ['#three'] })
+      .mockResolvedValueOnce({ score: 60, feedback: ['Low'] });
+
+    const result = await service.generatePost({
+      teamId: 'team_1',
+      brandVoiceId: 'bv_1',
+      platform: 'instagram',
+      pillarTopic: 'Growth',
+      contentType: 'educational',
+    });
+
+    expect(result.content).toBe('Attempt 3');
+    expect(result.voiceMatchScore).toBe(60);
+  });
+
+  it('crossPlatformAdapt humanizes each returned platform', async () => {
+    prisma.brandVoice.findUnique.mockResolvedValue(mockBrandVoice);
+    llm.completeJson.mockResolvedValue({ x: 'Tweet', linkedin: 'Post' });
+
+    await service.crossPlatformAdapt({
+      teamId: 'team_1',
+      sourceContent: 'Original',
+      sourcePlatform: 'instagram',
+      targetPlatforms: ['x', 'linkedin'],
+      brandVoiceId: 'bv_1',
+    });
+
+    expect(humanizer.humanize).toHaveBeenCalledTimes(2);
+  });
+
+  it('crossPlatformAdapt skips missing platform keys', async () => {
+    prisma.brandVoice.findUnique.mockResolvedValue(mockBrandVoice);
+    llm.completeJson.mockResolvedValue({ x: 'Tweet only' });
+
+    const result = await service.crossPlatformAdapt({
+      teamId: 'team_1',
+      sourceContent: 'Original',
+      sourcePlatform: 'instagram',
+      targetPlatforms: ['x', 'linkedin'],
+      brandVoiceId: 'bv_1',
+    });
+
+    expect(result).toEqual({ x: 'Tweet only' });
+  });
+
+  it('generateVariants adjusts target word count per variant', async () => {
+    prisma.brandVoice.findUnique.mockResolvedValue(mockBrandVoice);
+    llm.completeJson
+      .mockResolvedValueOnce({ content: 'Variant 1', hashtags: [] })
+      .mockResolvedValueOnce({ score: 90, feedback: [] })
+      .mockResolvedValueOnce({ content: 'Variant 2', hashtags: [] })
+      .mockResolvedValueOnce({ score: 90, feedback: [] });
+
+    await service.generateVariants({
+      teamId: 'team_1',
+      brandVoiceId: 'bv_1',
+      platform: 'instagram',
+      pillarTopic: 'Tips',
+      contentType: 'educational',
+      targetWordCount: 100,
+    }, 2);
+
+    expect(llm.completeJson.mock.calls[0][0]).toContain('Target length: 90 words');
+    expect(llm.completeJson.mock.calls[2][0]).toContain('Target length: 100 words');
+  });
+
+  it('scoreVoiceMatch returns zero feedback when brand voice is missing', async () => {
+    prisma.brandVoice.findUnique.mockResolvedValue(null);
+    await expect(service.scoreVoiceMatch('missing', 'content')).resolves.toEqual({
+      score: 0,
+      feedback: ['Brand voice not found'],
+    });
+  });
+
+  it('generateFullPost starts design generation in background', async () => {
+    prisma.brandVoice.findUnique.mockResolvedValue(mockBrandVoice);
+    llm.completeJson
+      .mockResolvedValueOnce({ content: 'Post with image', hashtags: [], imagePrompt: 'chart', style: 'graphic', aspectRatio: '1:1' })
+      .mockResolvedValueOnce({ score: 90, feedback: [] });
+
+    const result = await service.generateFullPost('team_1', {
+      brandVoiceId: 'bv_1',
+      platform: 'instagram',
+      pillarTopic: 'Growth',
+      contentType: 'educational',
+      topic: 'Growth',
+    });
+
+    expect(result.imageGenerationStarted).toBe(true);
+    expect(designer.generateImage).toHaveBeenCalled();
   });
 });

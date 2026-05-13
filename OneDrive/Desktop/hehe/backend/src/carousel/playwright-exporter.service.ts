@@ -1,116 +1,42 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { MediaService } from '../media/media.service';
-import { HtmlGeneratorService } from './html-generator.service';
-
-interface BrowserLike {
-  newContext(options: {
-    viewport: { width: number; height: number };
-    deviceScaleFactor: number;
-  }): Promise<ContextLike>;
-  close(): Promise<void>;
-}
-
-interface ContextLike {
-  newPage(): Promise<PageLike>;
-  close(): Promise<void>;
-}
-
-interface PageLike {
-  setContent(html: string): Promise<void>;
-  waitForLoadState(state: 'networkidle'): Promise<void>;
-  screenshot(options: {
-    type: 'png';
-    fullPage: boolean;
-    omitBackground: boolean;
-  }): Promise<Buffer>;
-}
-
-interface PlaywrightLike {
-  chromium: {
-    launch(): Promise<BrowserLike>;
-  };
-}
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { chromium, Browser } from 'playwright';
 
 @Injectable()
-export class PlaywrightExporterService {
+export class PlaywrightExporterService implements OnModuleDestroy {
   private readonly logger = new Logger(PlaywrightExporterService.name);
+  private browser: Browser | null = null;
 
-  constructor(
-    private readonly mediaService: MediaService,
-    private readonly htmlGenerator: HtmlGeneratorService,
-  ) {}
-
-  async export(input: {
-    teamId: string;
-    html: string;
-    slideCount: number;
-    deviceScaleFactor: number;
-  }): Promise<string[]> {
-    const playwright = this.loadPlaywright();
-    if (!playwright) {
-      return this.fallbackUrls(input.slideCount);
+  private async getBrowser(): Promise<Browser> {
+    if (!this.browser) {
+      this.logger.log('Launching Chromium for carousel exports');
+      this.browser = await chromium.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     }
+    return this.browser;
+  }
 
-    const browser = await playwright.chromium.launch();
-    const urls: string[] = [];
+  async exportSlideToBuffer(html: string, width = 1080, height = 1350): Promise<Buffer> {
+    const browser = await this.getBrowser();
+    const page = await browser.newPage();
 
     try {
-      for (let i = 0; i < input.slideCount; i++) {
-        const context = await browser.newContext({
-          viewport: { width: 420, height: 525 },
-          deviceScaleFactor: input.deviceScaleFactor,
-        });
-        try {
-          const page = await context.newPage();
-          await page.setContent(this.htmlGenerator.buildSingleSlideHtml(input.html, i));
-          await page.waitForLoadState('networkidle');
-          const buffer = await page.screenshot({
-            type: 'png',
-            fullPage: false,
-            omitBackground: false,
-          });
-
-          urls.push(await this.uploadOrFallback(input.teamId, buffer, i));
-        } finally {
-          await context.close();
-        }
-      }
+      await page.setViewportSize({ width, height });
+      await page.setContent(html, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(300);
+      const buffer = await page.screenshot({ type: 'png', clip: { x: 0, y: 0, width, height } });
+      return Buffer.from(buffer);
     } finally {
-      await browser.close();
-    }
-
-    return urls;
-  }
-
-  private loadPlaywright(): PlaywrightLike | null {
-    try {
-      const dynamicRequire = eval('require') as NodeRequire;
-      return dynamicRequire('playwright') as PlaywrightLike;
-    } catch {
-      this.logger.warn('Playwright is not installed in backend, using SVG preview URLs');
-      return null;
+      await page.close();
     }
   }
 
-  private async uploadOrFallback(teamId: string, buffer: Buffer, index: number): Promise<string> {
-    try {
-      return await this.mediaService.uploadGeneratedBuffer(
-        teamId,
-        buffer,
-        `carousel-slide-${index + 1}.png`,
-        'image/png',
-      );
-    } catch {
-      return this.fallbackUrl(index);
+  async exportSlidesToBuffers(htmlSlides: string[]): Promise<Buffer[]> {
+    return Promise.all(htmlSlides.map((html) => this.exportSlideToBuffer(html)));
+  }
+
+  async onModuleDestroy(): Promise<void> {
+    if (this.browser) {
+      await this.browser.close();
+      this.browser = null;
     }
-  }
-
-  private fallbackUrls(count: number): string[] {
-    return Array.from({ length: count }, (_, index) => this.fallbackUrl(index));
-  }
-
-  private fallbackUrl(index: number): string {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350"><rect width="100%" height="100%" fill="#f6f7f9"/><text x="540" y="675" text-anchor="middle" font-family="Arial" font-size="64" fill="#111827">Slide ${index + 1}</text></svg>`;
-    return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
   }
 }

@@ -2,6 +2,8 @@ import { Test } from '@nestjs/testing';
 import { MediaController } from './media.controller';
 import { MediaService, UploadedFile } from './media.service';
 import { BadRequestException } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt.guard';
+import { PlanLimitGuard } from '../common/guards/plan-limit.guard';
 
 const mockService = {
   uploadFile: jest.fn().mockResolvedValue({
@@ -26,7 +28,12 @@ describe('MediaController', () => {
     const module = await Test.createTestingModule({
       controllers: [MediaController],
       providers: [{ provide: MediaService, useValue: mockService }],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: jest.fn(() => true) })
+      .overrideGuard(PlanLimitGuard)
+      .useValue({ canActivate: jest.fn(() => true) })
+      .compile();
     controller = module.get(MediaController);
   });
 
