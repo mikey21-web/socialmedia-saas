@@ -33,6 +33,11 @@ import { UgcVideoService } from './specialists/ugc-video/ugc-video.service';
 import { UgcVideoController } from './specialists/ugc-video/ugc-video.controller';
 import { ClientPortalService } from './client-portal/client-portal.service';
 import { ClientPortalController } from './client-portal/client-portal.controller';
+import { ReelTemplateService } from './reel-studio/reel-template.service';
+import { ReelScriptService } from './reel-studio/reel-script.service';
+import { ReelCalendarService } from './reel-studio/reel-calendar.service';
+import { TrendingAudioService } from './reel-studio/trending-audio.service';
+import { ReelStudioController } from './reel-studio/reel-studio.controller';
 
 @Module({
   imports: [
@@ -57,6 +62,7 @@ import { ClientPortalController } from './client-portal/client-portal.controller
     TrendController,
     UgcVideoController,
     ClientPortalController,
+    ReelStudioController,
   ],
   providers: [
     AgentRunLoggerService,
@@ -74,7 +80,11 @@ import { ClientPortalController } from './client-portal/client-portal.controller
     ImageAdapterService,
     UgcVideoService,
     ClientPortalService,
+    ReelTemplateService,
+    ReelScriptService,
+    ReelCalendarService,
+    TrendingAudioService,
   ],
-  exports: [AgencyOrchestratorService, BossAgentService, ClientPortalService, CompetitorWatcherService],
+  exports: [AgencyOrchestratorService, BossAgentService, ClientPortalService, CompetitorWatcherService, ReelScriptService, ReelTemplateService],
 })
 export class AgencyModule {}

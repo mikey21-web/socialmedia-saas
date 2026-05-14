@@ -1195,3 +1195,111 @@ model BulkOnboardJob {
   @@index([status])
   @@map("bulk_onboard_job")
 }
+
+// ─── Reel Studio: Templates, Scripts, Calendar ──────────────────────────────
+
+model ReelTemplate {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  title           String
+  category        String   // product_showcase | bts | educational | before_after | founder_story | testimonial | trend_riding | day_in_life | promo | comparison | tutorial | story
+  vertical        String   // generic | salon | restaurant | real_estate | fitness | d2c | clinic | coach | retail | education | finance | tech | beauty | hospitality
+  goal            String   // awareness | conversion | engagement | trust | educate | entertain
+  difficulty      String   @default("easy") // easy | medium | advanced
+  estDurationSec  Int      @default(30)
+  shotCount       Int      @default(3)
+  shotList        Json     @default("[]")
+  structure       Json     @default("{}")
+  captionTemplate String
+  hashtagSets     Json     @default("[]")
+  audioMood       String[] @default([])
+  exampleUrl      String?
+  thumbnailUrl    String?
+  language        String   @default("en")
+  engagementTier  String   @default("high") // high | medium | low
+  tags            String[] @default([])
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([vertical])
+  @@index([category])
+  @@index([goal])
+  @@index([isActive])
+  @@map("reel_template")
+}
+
+model ReelScript {
+  id                String   @id @default(cuid())
+  teamId            String
+  templateId        String?
+  title             String
+  topic             String
+  vertical          String
+  goal              String
+  language          String   @default("en")
+  shots             Json     @default("[]")
+  hook              String
+  patternInterrupt  String?
+  cta               String
+  caption           String
+  hashtags          String[] @default([])
+  audioSuggestion   Json?
+  trendSignalId     String?
+  totalDuration     Int      @default(30)
+  videoProjectId    String?
+  status            String   @default("draft") // draft | filming | ready | published
+  filmingTips       Json     @default("[]")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([teamId])
+  @@index([templateId])
+  @@index([status])
+  @@index([videoProjectId])
+  @@map("reel_script")
+}
+
+model ReelCalendar {
+  id        String   @id @default(cuid())
+  teamId    String
+  vertical  String
+  month     Int
+  year      Int
+  language  String   @default("en")
+  entries   Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([teamId, month, year])
+  @@index([teamId])
+  @@map("reel_calendar")
+}
+
+model TrendingAudio {
+  id            String    @id @default(cuid())
+  title         String
+  artist        String?
+  platform      String    @default("instagram") // instagram | tiktok | youtube_shorts
+  externalId    String?
+  externalUrl   String?
+  previewUrl    String?
+  duration      Float     @default(30)
+  bpm           Int?
+  mood          String[]  @default([])
+  verticals     String[]  @default([])
+  language      String    @default("en")
+  trendStrength Int       @default(5)
+  isLicensed    Boolean   @default(false)
+  tags          String[]  @default([])
+  discoveredAt  DateTime  @default(now())
+  expiresAt     DateTime?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([platform])
+  @@index([trendStrength])
+  @@index([isActive])
+  @@map("trending_audio")
+}

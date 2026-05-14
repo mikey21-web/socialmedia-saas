@@ -11,6 +11,7 @@ import {
   Calendar,
   CheckCircle2,
   ChevronDown,
+  Clapperboard,
   FileImage,
   FileText,
   Film,
@@ -92,6 +93,7 @@ const SECTIONS: NavSection[] = [
     label: "Create",
     icon: Sparkles,
     items: [
+      { href: "/reels",              label: "Reel Studio",  icon: Clapperboard },
       { href: "/carousel",           label: "Carousel",     icon: FileImage },
       { href: "/hyperframes",        label: "Animated",     icon: Wand2 },
       { href: "/video",              label: "Video",        icon: Film },

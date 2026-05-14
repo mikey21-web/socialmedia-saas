@@ -132,6 +132,17 @@ const BANNERS: DiscoveryBanner[] = [
     showOn: ["/posts", "/dashboard"],
     showAfterDays: 5,
   },
+  {
+    id: "discover-reels",
+    title: "Don't know what to film for Reels?",
+    description: "Pick a proven format, tell us your topic, get a full shot list + script + hashtags in 10 seconds.",
+    cta: "Open Reel Studio",
+    href: "/reels",
+    icon: Film,
+    color: "from-violet-500/10 to-fuchsia-500/10 border-violet-500/20",
+    showOn: ["/dashboard", "/posts", "/video", "/media"],
+    showAfterDays: 2,
+  },
 ];
 
 const MAX_SHOWS = 3;
