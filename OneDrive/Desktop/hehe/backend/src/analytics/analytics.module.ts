@@ -13,11 +13,13 @@ import { PlatformMetricsFetcher } from './platform-metrics-fetcher.service';
 import { RoiController } from './roi.controller';
 import { RoiService } from './roi.service';
 import { LearningLoopService } from './learning-loop.service';
+import { GrowthProjectionController } from './growth-projection.controller';
+import { GrowthProjectionService } from './growth-projection.service';
 
 @Module({
   imports: [PrismaModule, TeamsModule, PlatformsModule, ScheduleModule.forRoot()],
-  controllers: [AnalyticsController, RoiController],
-  providers: [AnalyticsService, AnalyticsExportService, MetricsService, PlatformMetricsFetcher, CampaignsService, RoiService, LearningLoopService, SubscriptionGuard],
-  exports: [AnalyticsService, AnalyticsExportService, MetricsService, PlatformMetricsFetcher, CampaignsService, RoiService, LearningLoopService],
+  controllers: [AnalyticsController, RoiController, GrowthProjectionController],
+  providers: [AnalyticsService, AnalyticsExportService, MetricsService, PlatformMetricsFetcher, CampaignsService, RoiService, LearningLoopService, GrowthProjectionService, SubscriptionGuard],
+  exports: [AnalyticsService, AnalyticsExportService, MetricsService, PlatformMetricsFetcher, CampaignsService, RoiService, LearningLoopService, GrowthProjectionService],
 })
 export class AnalyticsModule {}
