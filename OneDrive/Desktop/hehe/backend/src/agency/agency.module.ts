@@ -21,6 +21,7 @@ import { CompetitorWatcherService } from './specialists/competitor-watcher/compe
 import { BrandVoiceTrainerService } from './brand-voice/brand-voice-trainer.service';
 import { BrandVoiceController } from './brand-voice/brand-voice.controller';
 import { TrendMonitorService } from './trends/trend-monitor.service';
+import { GoogleTrendsService } from './trends/google-trends.service';
 import { TrendController } from './trends/trend.controller';
 import { AgencyOrchestratorService } from './orchestrator/agency-orchestrator.service';
 import { AgencyOrchestratorController } from './orchestrator/agency-orchestrator.controller';
@@ -69,6 +70,7 @@ import { ClientPortalController } from './client-portal/client-portal.controller
     EngagementManagerService,
     CompetitorWatcherService,
     TrendMonitorService,
+    GoogleTrendsService,
     ImageAdapterService,
     UgcVideoService,
     ClientPortalService,

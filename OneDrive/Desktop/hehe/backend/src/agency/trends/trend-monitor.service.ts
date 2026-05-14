@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LlmService } from '../../agents/llm/llm.service';
 import { AgentRunLoggerService } from '../agent-run-logger.service';
+import { GoogleTrendsService } from './google-trends.service';
 
 @Injectable()
 export class TrendMonitorService {
@@ -12,6 +13,7 @@ export class TrendMonitorService {
     private readonly prisma: PrismaService,
     private readonly llm: LlmService,
     private readonly runLogger: AgentRunLoggerService,
+    private readonly googleTrends: GoogleTrendsService,
   ) {}
 
   @Cron('0 * * * *')
@@ -23,12 +25,15 @@ export class TrendMonitorService {
 
   async scanAllSources(): Promise<{ created: number }> {
     const before = await this.prisma.trendSignal.count();
+
+    // Real data sources first, LLM fallback for platforms without public APIs
     await Promise.allSettled([
-      this.scanXTrends(),
-      this.scanInstagramTrends(),
-      this.scanTikTokTrends(),
-      this.scanGoogleTrends(),
+      this.googleTrends.scanAndStore(),  // REAL Google Trends data
+      this.scanXTrends(),                // LLM-generated (needs real API for production)
+      this.scanInstagramTrends(),        // LLM-generated (no public trends API)
+      this.scanTikTokTrends(),           // LLM-generated (needs Research API)
     ]);
+
     const after = await this.prisma.trendSignal.count();
     return { created: Math.max(0, after - before) };
   }
@@ -54,10 +59,6 @@ export class TrendMonitorService {
       'audio',
       'format',
     ]);
-  }
-
-  private async scanGoogleTrends(): Promise<void> {
-    await this.generateTrendSignals('google', ['topic']);
   }
 
   private async generateTrendSignals(platform: string, signalTypes: string[]): Promise<void> {
