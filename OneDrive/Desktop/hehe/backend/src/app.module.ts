@@ -40,6 +40,7 @@ import { CarouselModule } from './carousel/carousel.module';
 import { HumanizerModule } from './ai/humanizer/humanizer.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
+import { FeedbackModule } from './feedback/feedback.module';
 import { HealthController } from './health.controller';
 import { RedisModule } from './redis/redis.module';
 
@@ -99,6 +100,7 @@ import { RedisModule } from './redis/redis.module';
     HumanizerModule,
     OnboardingModule,
     WaitlistModule,
+    FeedbackModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }, RedisProvider],

@@ -58,6 +58,27 @@ export class EmailService {
     });
   }
 
+  async sendOnboardingNudge(email: string, teamName: string) {
+    const appUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+    return this.send({
+      to: email,
+      subject: 'Your AI team is waiting — finish setup in 5 minutes',
+      text: `Hi! You started setting up ${teamName} on Diyaa AI but haven't finished. Your AI marketing team is ready to start working — just complete the last few steps: ${appUrl}/onboarding`,
+      html: `<p>Hi! You started setting up <strong>${this.escapeHtml(teamName)}</strong> on Diyaa AI but haven't finished.</p><p>Your AI marketing team is ready to start working — just complete the last few steps.</p><p><a href="${this.escapeHtml(appUrl)}/onboarding" style="display:inline-block;background:#6366f1;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;">Complete Setup →</a></p><p style="color:#666;font-size:13px;margin-top:24px;">Takes less than 5 minutes. Your first week of content will be ready tonight.</p>`,
+    });
+  }
+
+  async sendUpgradePrompt(email: string, currentPlan: string, usage: number, limit: number) {
+    const appUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+    const pct = Math.round((usage / limit) * 100);
+    return this.send({
+      to: email,
+      subject: `You've used ${pct}% of your ${currentPlan} plan this month`,
+      text: `You've used ${usage} of ${limit} posts this month (${pct}%). Upgrade to Pro for 3x the limit plus advanced features: ${appUrl}/settings/billing`,
+      html: `<p>You've used <strong>${usage} of ${limit}</strong> posts this month (${pct}%).</p><p>Upgrade to Pro for 3x the limit, plus:</p><ul><li>Advanced analytics + ROI tracking</li><li>Competitor monitoring</li><li>Performance learning loop</li><li>3 brand voice profiles</li></ul><p><a href="${this.escapeHtml(appUrl)}/settings/billing" style="display:inline-block;background:#6366f1;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:600;">Upgrade Now →</a></p>`,
+    });
+  }
+
   async sendWeeklyDigest(
     email: string,
     data: {
