@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { PixelOffice } from "@/components/pixel-office/pixel-office";
 
 /* ─── Agent definitions ──────────────────────────────────── */
 
@@ -606,34 +607,32 @@ export default function AgencyOfficePage() {
         </Card>
       )}
 
-      {/* Agent Desks — the "office floor" */}
-      <Card className="overflow-visible">
+      {/* Pixel Office — animated agent workspace */}
+      <Card className="overflow-hidden">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm font-medium flex items-center gap-2">
             <Eye className="size-4 text-muted-foreground" />
             Agent Floor — click an agent to see their conversations
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap justify-center gap-4">
-            {AGENTS.map((agent) => (
-              <AgentDesk
-                key={agent.id}
-                agent={agent}
-                isActive={activeAgents.has(agent.id) || selectedAgent === agent.id}
-                onClick={() => handleAgentClick(agent.id)}
-              />
-            ))}
-          </div>
-
-          {/* Connection lines — visual indicator */}
-          {selectedAgent && (
-            <div className="mt-4 flex items-center justify-center gap-1 text-xs text-muted-foreground">
-              <span className="inline-block w-8 h-px bg-gradient-to-r from-transparent to-muted-foreground/50" />
-              agents are connected — click to see conversations
-              <span className="inline-block w-8 h-px bg-gradient-to-l from-transparent to-muted-foreground/50" />
-            </div>
-          )}
+        <CardContent className="p-0">
+          <PixelOffice
+            agents={AGENTS.map((a) => ({
+              id: a.id,
+              name: a.name,
+              role: a.role,
+              color: a.color.includes("blue") ? "#3b82f6" : a.color.includes("emerald") ? "#10b981" : a.color.includes("purple") ? "#8b5cf6" : a.color.includes("amber") ? "#f59e0b" : a.color.includes("rose") ? "#ec4899" : a.color.includes("pink") ? "#ec4899" : "#eab308",
+              skinColor: "#d4a574",
+              hairColor: "#1a1a2e",
+              deskX: a.id === "strategist" ? 1 : a.id === "copywriter" ? 3 : a.id === "designer" ? 5 : a.id === "analyst" ? 2 : a.id === "engagement_manager" ? 4 : a.id === "ugc_video" ? 0.5 : 3,
+              deskY: ["strategist","copywriter","designer"].includes(a.id) ? 0.5 : a.id === "ugc_video" ? 2 : 2.5,
+              state: (activeAgents.has(a.id) ? "working" : selectedAgent === a.id ? "talking" : "idle") as "working" | "talking" | "idle",
+              emoji: a.avatar,
+            }))}
+            activeAgentId={selectedAgent}
+            onAgentClick={handleAgentClick}
+            className="rounded-none border-0"
+          />
         </CardContent>
       </Card>
 
