@@ -39,6 +39,7 @@ import { BrandVoiceModule } from './brand-voice/brand-voice.module';
 import { CarouselModule } from './carousel/carousel.module';
 import { HumanizerModule } from './ai/humanizer/humanizer.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
+import { WaitlistModule } from './waitlist/waitlist.module';
 import { HealthController } from './health.controller';
 import { RedisModule } from './redis/redis.module';
 
@@ -97,6 +98,7 @@ import { RedisModule } from './redis/redis.module';
     CarouselModule,
     HumanizerModule,
     OnboardingModule,
+    WaitlistModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }, RedisProvider],
