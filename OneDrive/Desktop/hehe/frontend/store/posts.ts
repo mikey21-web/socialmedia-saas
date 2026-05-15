@@ -133,3 +133,17 @@ export const usePostsStore = create<PostsState>((set) => ({
     }
   },
 }));
+
+export function selectUpcomingByDay(posts: Array<{ id: string; status: string; scheduledAt?: string | null; title: string; platform: string }>) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const groups: Record<string, typeof posts> = {};
+  for (const p of posts) {
+    if (p.status !== "scheduled" || !p.scheduledAt) continue;
+    const d = new Date(p.scheduledAt);
+    const key = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
+    if (new Date(key).getTime() < today) continue;
+    (groups[key] ??= []).push(p);
+  }
+  return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+}
