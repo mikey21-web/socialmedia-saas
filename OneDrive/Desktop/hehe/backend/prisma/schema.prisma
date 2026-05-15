@@ -64,6 +64,8 @@ model Team {
   carousels            Carousel[]
   competitorTracks     CompetitorTrack[]
   reports              Report[]
+  autopilotMode        Boolean                 @default(false)
+  autopilotEnabledAt   DateTime?
 
   @@index([ownerId])
 }
