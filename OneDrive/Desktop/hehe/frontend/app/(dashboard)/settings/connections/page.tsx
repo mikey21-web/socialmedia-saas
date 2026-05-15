@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   AlertCircle,
   CheckCircle2,
@@ -43,11 +44,26 @@ const PLATFORM_META: Record<string, { label: string; color: string; emoji: strin
 const CONNECTABLE_PLATFORMS = ["x", "instagram", "linkedin", "facebook", "tiktok", "youtube"];
 
 export default function ConnectionsPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [banner, setBanner] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
+  useEffect(() => {
+    const connected = searchParams.get("connected");
+    const oauthError = searchParams.get("error");
+    if (connected === "true") {
+      setBanner({ type: "success", message: "Account connected successfully." });
+      router.replace("/settings/connections");
+    } else if (oauthError) {
+      setBanner({ type: "error", message: decodeURIComponent(oauthError) });
+      router.replace("/settings/connections");
+    }
+  }, [searchParams, router]);
 
   const fetchCredentials = useCallback(async () => {
     setLoading(true);
@@ -66,9 +82,16 @@ export default function ConnectionsPage() {
     fetchCredentials();
   }, [fetchCredentials]);
 
-  const handleConnect = (platform: string) => {
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
-    window.location.href = `${baseUrl}/platforms/oauth/${platform}`;
+  const [connecting, setConnecting] = useState<string | null>(null);
+
+  const handleConnect = async (platform: string) => {
+    setConnecting(platform);
+    try {
+      const res = await api.get<{ url: string }>(`/oauth/${platform}/url`);
+      window.location.href = res.data.url;
+    } catch {
+      setConnecting(null);
+    }
   };
 
   const handleDisconnect = async (credentialId: string) => {
@@ -103,6 +126,24 @@ export default function ConnectionsPage() {
           Connect your social accounts to start publishing
         </p>
       </div>
+
+      {banner && (
+        <div
+          className={cn(
+            "flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm",
+            banner.type === "success"
+              ? "bg-emerald-500/15 text-emerald-600 border border-emerald-500/25"
+              : "bg-red-500/15 text-red-600 border border-red-500/25",
+          )}
+        >
+          {banner.type === "success" ? (
+            <CheckCircle2 className="size-4 shrink-0" />
+          ) : (
+            <AlertCircle className="size-4 shrink-0" />
+          )}
+          {banner.message}
+        </div>
+      )}
 
       {loading ? (
         <SkeletonRow count={4} />
@@ -226,7 +267,8 @@ export default function ConnectionsPage() {
                     <button
                       key={platform}
                       onClick={() => handleConnect(platform)}
-                      className="flex items-center gap-2.5 p-3 rounded-lg border border-border hover:border-ring hover:bg-muted/50 transition-colors text-left group"
+                      disabled={connecting === platform}
+                      className="flex items-center gap-2.5 p-3 rounded-lg border border-border hover:border-ring hover:bg-muted/50 transition-colors text-left group disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       <div
                         className={cn(
@@ -239,7 +281,11 @@ export default function ConnectionsPage() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{meta.label}</p>
                       </div>
-                      <Plus className="size-3.5 text-muted-foreground ml-auto shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      {connecting === platform ? (
+                        <Loader2 className="size-3.5 text-muted-foreground ml-auto shrink-0 animate-spin" />
+                      ) : (
+                        <Plus className="size-3.5 text-muted-foreground ml-auto shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      )}
                     </button>
                   );
                 })}
