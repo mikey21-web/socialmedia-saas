@@ -1276,6 +1276,17 @@ model ReelCalendar {
   @@map("reel_calendar")
 }
 
+model AgentActivity {
+  id        String   @id @default(cuid())
+  teamId    String
+  agent     String
+  action    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([teamId, createdAt])
+}
+
 model TrendingAudio {
   id            String    @id @default(cuid())
   title         String

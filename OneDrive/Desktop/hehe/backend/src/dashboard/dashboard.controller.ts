@@ -20,4 +20,14 @@ export class DashboardController {
   ) {
     return this.dashboard.getEngagement(req.user.team_id, range);
   }
+
+  @Get('insights')
+  insights(@Req() req: { user: AuthenticatedRequestUser }) {
+    return this.dashboard.getInsights(req.user.team_id);
+  }
+
+  @Get('activity')
+  activity(@Req() req: { user: AuthenticatedRequestUser }) {
+    return this.dashboard.getActivity(req.user.team_id);
+  }
 }
