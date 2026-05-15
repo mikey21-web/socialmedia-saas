@@ -290,10 +290,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
 
           {/* Main content */}
-          <main className="flex-1 overflow-auto bg-background flex flex-col">
+          <main className="flex-1 min-h-0 bg-background flex flex-col overflow-hidden">
             <UpgradeBanner />
             <FeatureDiscoveryBanner />
-            <div className="flex-1 relative">
+            <div className="flex-1 min-h-0 relative overflow-hidden">
               {children}
             </div>
           </main>
