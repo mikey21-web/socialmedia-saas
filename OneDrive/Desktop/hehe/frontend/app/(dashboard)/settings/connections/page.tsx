@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -43,7 +43,7 @@ const PLATFORM_META: Record<string, { label: string; color: string; emoji: strin
 
 const CONNECTABLE_PLATFORMS = ["x", "instagram", "linkedin", "facebook", "tiktok", "youtube"];
 
-export default function ConnectionsPage() {
+function ConnectionsPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [credentials, setCredentials] = useState<Credential[]>([]);
@@ -303,5 +303,13 @@ export default function ConnectionsPage() {
         </>
       )}
     </div>
+  );
+}
+
+export default function ConnectionsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ConnectionsPageInner />
+    </Suspense>
   );
 }

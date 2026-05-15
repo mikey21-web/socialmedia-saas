@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { ThemeProvider } from "next-themes";
 import { SessionExpiryProvider } from "@/components/session-expiry-provider";
 import { Analytics } from "@/components/analytics";
@@ -107,7 +108,7 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
           <SessionExpiryProvider>{children}</SessionExpiryProvider>
         </ThemeProvider>
-        <Analytics />
+        <Suspense fallback={null}><Analytics /></Suspense>
       </body>
     </html>
   );
