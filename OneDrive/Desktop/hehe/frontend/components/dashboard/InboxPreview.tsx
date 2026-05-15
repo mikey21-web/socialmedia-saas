@@ -49,7 +49,7 @@ export function InboxPreview() {
         <ul className="space-y-2">
           {items.map((item) => (
             <li key={item.id} className="flex items-start gap-2.5 text-sm">
-              <PlatformBadge platform={item.platform} showLabel={false} className="shrink-0 mt-0.5" />
+              <PlatformBadge platform={item.platform as "twitter" | "instagram" | "linkedin" | "facebook" | "youtube" | "tiktok"} showLabel={false} className="shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium">{item.author}</p>
                 <p className="text-xs text-muted-foreground truncate">{item.text}</p>

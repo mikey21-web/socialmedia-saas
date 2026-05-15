@@ -63,7 +63,7 @@ export function SmartQueue() {
                   href={`/posts/${p.id}`}
                   className="flex items-center gap-3 rounded-md border border-border p-2.5 hover:border-ring transition-colors"
                 >
-                  <PlatformBadge platform={p.platform} showLabel={false} className="shrink-0" />
+                  <PlatformBadge platform={p.platform as "twitter" | "instagram" | "linkedin" | "facebook" | "youtube" | "tiktok"} showLabel={false} className="shrink-0" />
                   <p className="flex-1 text-sm truncate">{p.title}</p>
                   <span className="text-xs text-muted-foreground shrink-0">
                     {new Date(p.scheduledAt!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
