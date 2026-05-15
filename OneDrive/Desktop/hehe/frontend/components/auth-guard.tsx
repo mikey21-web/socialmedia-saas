@@ -9,6 +9,10 @@ function isBoneyardBuild() {
   return process.env.NODE_ENV !== 'production' && typeof window !== "undefined" && Boolean((window as Window & { __BONEYARD_BUILD?: boolean }).__BONEYARD_BUILD);
 }
 
+function isDemoMode(token: string | null) {
+  return token === "demo-preview-token";
+}
+
 export function AuthGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -25,14 +29,14 @@ export function AuthGuard({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hydrated) return;
-    if (isBoneyardBuild()) return;
+    if (isBoneyardBuild() || isDemoMode(token)) return;
     if (!token) {
       router.replace("/signin");
     }
   }, [token, router, hydrated]);
 
   useEffect(() => {
-    if (isBoneyardBuild()) {
+    if (isBoneyardBuild() || isDemoMode(token)) {
       setProfileChecked(true);
       return;
     }
@@ -43,7 +47,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!hydrated || !token || !profileChecked || loading) return;
-    if (isBoneyardBuild()) return;
+    if (isBoneyardBuild() || isDemoMode(token)) return;
     const isOnboarding = pathname.startsWith("/onboarding");
     const localOnboardingComplete = localStorage.getItem("onboardingComplete") === "true";
 
@@ -52,7 +56,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     }
   }, [hydrated, token, profileChecked, loading, profile, pathname, router]);
 
-  if (isBoneyardBuild()) return <>{children}</>;
+  if (isBoneyardBuild() || isDemoMode(token)) return <>{children}</>;
   if (!hydrated || !token) return null;
   if (!profileChecked || loading) return null;
   return <>{children}</>;

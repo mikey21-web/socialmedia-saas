@@ -25,7 +25,13 @@ api.interceptors.response.use(
   (r) => r,
   (err) => {
     if (err?.response?.status === 401 && typeof window !== "undefined") {
-      emitSessionUnauthorized();
+      try {
+        const raw = localStorage.getItem("auth");
+        const token = raw ? (JSON.parse(raw) as { state?: { token?: string } })?.state?.token : null;
+        if (token !== "demo-preview-token") emitSessionUnauthorized();
+      } catch {
+        emitSessionUnauthorized();
+      }
     }
     return Promise.reject(err);
   }
