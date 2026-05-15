@@ -1,24 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Calendar,
   Eye,
   FileText,
-  Filter,
-  Loader2,
   MoreHorizontal,
+  Pencil,
   PlusCircle,
   Search,
   TrendingUp,
+  Trash2,
+  Clock,
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { PostModal } from "@/components/post-modal";
 import { PlatformBadge } from "@/components/platform-badge";
-import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonRow } from "@/components/ui/loading-state";
 import { ErrorState } from "@/components/ui/error-state";
 import { api } from "@/lib/api";
@@ -37,12 +36,28 @@ interface Post {
   impressions?: number;
 }
 
-const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
-  published:           { label: "Published",  className: "bg-emerald-500/15 text-emerald-500 border-emerald-500/25" },
-  scheduled:           { label: "Scheduled",  className: "bg-amber-500/15 text-amber-500 border-amber-500/25" },
-  draft:               { label: "Draft",      className: "bg-muted text-muted-foreground border-border" },
-  failed:              { label: "Failed",     className: "bg-destructive/15 text-destructive border-destructive/25" },
-  partially_published: { label: "Partial",    className: "bg-orange-500/15 text-orange-500 border-orange-500/25" },
+const STATUS_BAR: Record<Post["status"], string> = {
+  draft:               "bg-zinc-500",
+  scheduled:           "bg-violet-500",
+  published:           "bg-emerald-500",
+  failed:              "bg-red-500",
+  partially_published: "bg-amber-500",
+};
+
+const STATUS_LABEL: Record<Post["status"], string> = {
+  draft:               "Draft",
+  scheduled:           "Scheduled",
+  published:           "Published",
+  failed:              "Failed",
+  partially_published: "Partial",
+};
+
+const STATUS_DOT: Record<Post["status"], string> = {
+  draft:               "bg-zinc-500",
+  scheduled:           "bg-violet-500",
+  published:           "bg-emerald-500",
+  failed:              "bg-red-500",
+  partially_published: "bg-amber-500",
 };
 
 const FILTER_TABS = [
@@ -75,9 +90,7 @@ export default function PostsPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchPosts();
-  }, [fetchPosts]);
+  useEffect(() => { fetchPosts(); }, [fetchPosts]);
 
   const filtered = posts.filter((post) => {
     const matchesFilter = filter === "all" || post.status === filter;
@@ -96,175 +109,222 @@ export default function PostsPage() {
   }, {});
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Posts</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {posts.length} post{posts.length !== 1 ? "s" : ""} total
-          </p>
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Header bar */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
+        <div className="flex items-center gap-3">
+          <h1 className="text-base font-semibold">Posts</h1>
+          <span className="text-xs text-muted-foreground">
+            {posts.length} total
+          </span>
         </div>
         <PostModal
           trigger={
-            <Button className="gap-2 self-start sm:self-auto">
-              <PlusCircle className="size-4" />
-              New Post
+            <Button size="sm" className="gap-1.5">
+              <PlusCircle className="size-3.5" />
+              New post
             </Button>
           }
+          onSuccess={fetchPosts}
         />
       </div>
 
-      {/* Filter tabs + search */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
+      {/* Tab bar with counts */}
+      <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-border shrink-0">
+        <div className="flex gap-1 overflow-x-auto">
           {FILTER_TABS.map((tab) => (
             <button
               key={tab.key}
               onClick={() => setFilter(tab.key)}
               className={cn(
-                "px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                "shrink-0 px-3 py-1.5 rounded-md text-xs font-medium transition-colors inline-flex items-center gap-1.5",
                 filter === tab.key
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground",
+                  ? "bg-violet-500/10 text-violet-400 border border-violet-500/30"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent border border-transparent",
               )}
             >
-              {tab.label}
-              {counts[tab.key] > 0 && (
-                <span className={cn(
-                  "ml-1.5 text-xs px-1.5 py-0.5 rounded-full",
-                  filter === tab.key ? "bg-muted text-muted-foreground" : "bg-background/50",
-                )}>
-                  {counts[tab.key]}
-                </span>
+              {tab.key !== "all" && (
+                <span className={cn("size-1.5 rounded-full", STATUS_DOT[tab.key as Post["status"]])} />
               )}
+              {tab.label}
+              <span className={cn(
+                "text-[10px] tabular-nums",
+                filter === tab.key ? "text-violet-300" : "text-muted-foreground/60",
+              )}>
+                {counts[tab.key]}
+              </span>
             </button>
           ))}
         </div>
 
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+        <div className="relative w-56 shrink-0">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
           <Input
-            placeholder="Search posts…"
+            placeholder="Search…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
+            className="pl-8 h-8 text-xs"
           />
         </div>
       </div>
 
-      {/* Content */}
-      {loading ? (
-        <SkeletonRow count={5} />
-      ) : error ? (
-        <ErrorState
-          title="Could not load posts"
-          message={error.message}
-          onRetry={fetchPosts}
-        />
-      ) : filtered.length === 0 ? (
-        <EmptyState
-          icon={FileText}
-          title={search ? "No posts match your search" : "No posts yet"}
-          description={
-            search
-              ? "Try a different search term or clear the filter."
-              : "Create your first post and schedule it across all your platforms."
-          }
-          action={
-            !search ? (
-              <PostModal
-                trigger={
-                  <Button className="gap-2">
-                    <PlusCircle className="size-4" />
-                    Create first post
-                  </Button>
-                }
-              />
-            ) : undefined
-          }
-        />
-      ) : (
-        <div className="space-y-2">
-          {filtered.map((post) => (
-            <PostRow key={post.id} post={post} onRefresh={fetchPosts} />
-          ))}
-        </div>
-      )}
+      {/* Content area */}
+      <div className="flex-1 overflow-y-auto px-5 py-4">
+        {loading ? (
+          <SkeletonRow count={6} />
+        ) : error ? (
+          <ErrorState
+            title="Could not load posts"
+            message={error.message}
+            onRetry={fetchPosts}
+          />
+        ) : filtered.length === 0 ? (
+          <EmptyPosts search={search} onClear={() => setSearch("")} onRefresh={fetchPosts} />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {filtered.map((post) => (
+              <PostCard key={post.id} post={post} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function PostRow({ post, onRefresh }: { post: Post; onRefresh: () => void }) {
-  const status = STATUS_CONFIG[post.status] ?? STATUS_CONFIG.draft;
-  const hasMetrics = (post.impressions ?? 0) > 0 || (post.reach ?? 0) > 0;
+function PostCard({ post }: { post: Post }) {
+  const time = post.scheduledAt
+    ? new Date(post.scheduledAt).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : new Date(post.createdAt).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+      });
+
+  const hasMetrics =
+    post.status === "published" &&
+    ((post.impressions ?? 0) > 0 || (post.reach ?? 0) > 0);
+
+  const primary = post.platforms[0]?.platform;
+  const extra = post.platforms.length > 1 ? post.platforms.length - 1 : 0;
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-3 hover:border-ring transition-colors group">
-      {/* Platform badges */}
-      <div className="flex gap-1 shrink-0">
-        {post.platforms.slice(0, 3).map((p) => (
-          <PlatformBadge key={p.platform} platform={p.platform} showLabel={false} />
-        ))}
-        {post.platforms.length > 3 && (
-          <span className="text-xs text-muted-foreground self-center">
-            +{post.platforms.length - 3}
+    <div className="group rounded-lg overflow-hidden border border-border bg-card hover:border-ring transition-all">
+      {/* Colored header bar */}
+      <div className={cn("h-7 px-2.5 flex items-center justify-between", STATUS_BAR[post.status])}>
+        <div className="flex items-center gap-1.5 min-w-0">
+          {primary && <PlatformBadge platform={primary} showLabel={false} className="scale-75 -ml-0.5" />}
+          {extra > 0 && (
+            <span className="text-[10px] font-medium text-white/90">+{extra}</span>
+          )}
+          <span className="text-[10px] font-medium text-white/90 ml-1 inline-flex items-center gap-1">
+            <Clock className="size-2.5" />
+            {time}
           </span>
-        )}
+        </div>
+        <div className="hidden group-hover:flex items-center gap-0.5">
+          <Link
+            href={`/posts/${post.id}`}
+            className="size-5 flex items-center justify-center rounded text-white/80 hover:text-white hover:bg-white/20"
+            aria-label="Edit post"
+          >
+            <Pencil className="size-3" />
+          </Link>
+          <button
+            className="size-5 flex items-center justify-center rounded text-white/80 hover:text-white hover:bg-white/20"
+            aria-label="More actions"
+          >
+            <MoreHorizontal className="size-3" />
+          </button>
+        </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{post.title}</p>
-        <p className="text-xs text-muted-foreground truncate mt-0.5">
-          {post.content.slice(0, 80)}{post.content.length > 80 ? "…" : ""}
+      {/* Body */}
+      <Link href={`/posts/${post.id}`} className="block p-3 space-y-2">
+        <p className="text-sm font-medium leading-snug line-clamp-2">
+          {post.title || "Untitled post"}
         </p>
+        <p className="text-xs text-muted-foreground line-clamp-3">
+          {post.content}
+        </p>
+
+        {/* Footer row — status pill + metrics */}
+        <div className="flex items-center justify-between pt-1.5 mt-1.5 border-t border-border/50">
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-medium">
+            <span className={cn("size-1.5 rounded-full", STATUS_DOT[post.status])} />
+            <span className="text-muted-foreground">{STATUS_LABEL[post.status]}</span>
+          </span>
+          {hasMetrics && (
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+              <span className="flex items-center gap-0.5">
+                <Eye className="size-2.5" />
+                {(post.impressions ?? 0).toLocaleString()}
+              </span>
+              <span className="flex items-center gap-0.5">
+                <TrendingUp className="size-2.5" />
+                {(post.reach ?? 0).toLocaleString()}
+              </span>
+            </div>
+          )}
+        </div>
+      </Link>
+    </div>
+  );
+}
+
+function EmptyPosts({
+  search,
+  onClear,
+  onRefresh,
+}: {
+  search: string;
+  onClear: () => void;
+  onRefresh: () => void;
+}) {
+  if (search) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="size-12 rounded-full bg-muted flex items-center justify-center mb-3">
+          <Search className="size-5 text-muted-foreground" />
+        </div>
+        <p className="text-sm font-medium">No posts match &quot;{search}&quot;</p>
+        <p className="text-xs text-muted-foreground mt-1 mb-4">Try a different keyword.</p>
+        <Button variant="outline" size="sm" onClick={onClear}>Clear search</Button>
       </div>
+    );
+  }
 
-      {/* Metrics (only when published) */}
-      {hasMetrics && (
-        <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground shrink-0">
-          <span className="flex items-center gap-1">
-            <Eye className="size-3" />
-            {(post.impressions ?? 0).toLocaleString()}
-          </span>
-          <span className="flex items-center gap-1">
-            <TrendingUp className="size-3" />
-            {(post.reach ?? 0).toLocaleString()}
-          </span>
-        </div>
-      )}
-
-      {/* Scheduled date */}
-      {post.scheduledAt && post.status === "scheduled" && (
-        <div className="hidden md:flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-          <Calendar className="size-3" />
-          {new Date(post.scheduledAt).toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </div>
-      )}
-
-      {/* Status badge */}
-      <span
-        className={cn(
-          "shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border",
-          status.className,
-        )}
-      >
-        {status.label}
-      </span>
-
-      {/* Actions (visible on hover) */}
-      <button
-        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted"
-        aria-label="Post options"
-      >
-        <MoreHorizontal className="size-4 text-muted-foreground" />
-      </button>
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto">
+      <div className="size-16 rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center mb-4 shadow-lg shadow-violet-500/20">
+        <FileText className="size-7 text-white" />
+      </div>
+      <h2 className="text-base font-semibold">Start posting smarter</h2>
+      <p className="text-xs text-muted-foreground mt-1.5 mb-4 max-w-xs">
+        Draft once, schedule everywhere. Brain will help write, time, and approve.
+      </p>
+      <div className="flex items-center gap-2">
+        <PostModal
+          trigger={
+            <Button size="sm" className="gap-1.5">
+              <PlusCircle className="size-3.5" />
+              Create first post
+            </Button>
+          }
+          onSuccess={onRefresh}
+        />
+        <Link
+          href="/calendar"
+          className="text-xs inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border hover:bg-accent transition-colors"
+        >
+          <Calendar className="size-3.5" />
+          See calendar
+        </Link>
+      </div>
     </div>
   );
 }
