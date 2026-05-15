@@ -36,21 +36,22 @@ function initPostHog() {
   const key = process.env.NEXT_PUBLIC_POSTHOG_KEY;
   if (!key || typeof window === "undefined") return;
 
-  // Dynamically import posthog-js only if installed
-  // Install with: npm install posthog-js
-  import("posthog-js" as any).then((mod: any) => {
-    const posthog = mod.default;
-    posthog.init(key, {
-      api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://app.posthog.com",
-      capture_pageview: false,
-      capture_pageleave: true,
-      autocapture: true,
-      persistence: "localStorage",
-    });
-    window.posthog = posthog;
-  }).catch(() => {
-    // posthog-js not installed — skip silently
-  });
+  const host = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us-assets.i.posthog.com";
+  const script = document.createElement("script");
+  script.src = `${host}/static/array.js`;
+  script.async = true;
+  script.onload = () => {
+    if (window.posthog) {
+      window.posthog.init(key, {
+        api_host: process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com",
+        capture_pageview: false,
+        capture_pageleave: true,
+        autocapture: true,
+        persistence: "localStorage",
+      });
+    }
+  };
+  document.head.appendChild(script);
 }
 
 function initCrisp() {
