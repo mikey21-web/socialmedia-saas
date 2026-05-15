@@ -41,6 +41,7 @@ import { HumanizerModule } from './ai/humanizer/humanizer.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { WaitlistModule } from './waitlist/waitlist.module';
 import { FeedbackModule } from './feedback/feedback.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { HealthController } from './health.controller';
 import { RedisModule } from './redis/redis.module';
 
@@ -101,6 +102,7 @@ import { RedisModule } from './redis/redis.module';
     OnboardingModule,
     WaitlistModule,
     FeedbackModule,
+    DashboardModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }, RedisProvider],
