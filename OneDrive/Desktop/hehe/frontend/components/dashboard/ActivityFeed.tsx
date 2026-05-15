@@ -36,10 +36,13 @@ export function ActivityFeed() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get<Activity[]>("/dashboard/activity")
+    const load = () => api.get<Activity[]>("/dashboard/activity")
       .then((res) => setItems(res.data))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
+    load();
+    const id = window.setInterval(load, 60_000);
+    return () => window.clearInterval(id);
   }, []);
 
   if (loading) return <Skeleton className="h-64" />;

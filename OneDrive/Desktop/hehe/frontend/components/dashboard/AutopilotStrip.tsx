@@ -18,10 +18,13 @@ export function AutopilotStrip() {
   const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
-    api.get<AutopilotStatus>("/autopilot/status")
+    const load = () => api.get<AutopilotStatus>("/autopilot/status")
       .then((res) => setStatus(res.data))
       .catch(() => setStatus({ enabled: false, enabledAt: null, last7d: { published: 0, pendingApproval: 0 } }))
       .finally(() => setLoading(false));
+    load();
+    const id = window.setInterval(load, 60_000);
+    return () => window.clearInterval(id);
   }, []);
 
   async function toggle() {

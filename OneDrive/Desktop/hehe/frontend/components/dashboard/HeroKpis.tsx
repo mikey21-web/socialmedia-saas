@@ -25,6 +25,8 @@ export function HeroKpis() {
 
   useEffect(() => {
     fetchSummary();
+    const id = window.setInterval(fetchSummary, 60_000);
+    return () => window.clearInterval(id);
   }, [fetchSummary]);
 
   if (loading && !summary) {

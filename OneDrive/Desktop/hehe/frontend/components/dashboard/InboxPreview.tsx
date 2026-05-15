@@ -21,10 +21,13 @@ export function InboxPreview() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get<InboxItem[]>("/inbox?limit=5")
+    const load = () => api.get<InboxItem[]>("/inbox?limit=5")
       .then((res) => setItems(res.data))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
+    load();
+    const id = window.setInterval(load, 60_000);
+    return () => window.clearInterval(id);
   }, []);
 
   if (loading) return <Skeleton className="h-48" />;
