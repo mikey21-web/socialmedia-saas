@@ -1,20 +1,18 @@
 import type { Metadata } from 'next';
-import '@/styles/globals.css';
+import './globals.css';
+import { AppShell } from '@/components/app-shell';
 
 export const metadata: Metadata = {
-  title: 'Uday - AI Automation Specialist',
-  description: 'I build AI agents that run your business on autopilot',
+  title: 'Pulse · Local Social Media OS',
+  description:
+    'A local-first social media SaaS demo with SQLite, Groq AI post generation, scheduling, analytics, and LinkedIn auto-posting.',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <body>
-        {children}
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

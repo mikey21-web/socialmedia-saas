@@ -43,3 +43,18 @@ yarn-error.log*
 
 # OS
 Thumbs.db
+
+# Local SQLite database
+data/
+data-verify/
+*.db
+*.db-wal
+*.db-shm
+
+# Generated
+next-env.d.ts
+
+
+# Build artifacts and local logs
+*.tsbuildinfo
+server.log
